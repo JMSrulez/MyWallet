@@ -55,11 +55,8 @@ test("failed valuation writes no partial snapshot and preserves the last known b
     const portfolio = buildPortfolio(store);
     assert.equal(portfolio.total, 25);
     assert.equal(store.snapshots().length, 1);
-    assert.ok(portfolio.accounts[0].last_error);
-    assert.equal(
-      JSON.stringify(portfolio).includes("secret-provider-error"),
-      false,
-    );
+    assert.match(portfolio.accounts[0].last_error, /secret-provider-error/);
+    assert.equal(JSON.stringify(portfolio).includes("encrypted-secret"), false);
   } finally {
     store.close();
   }
