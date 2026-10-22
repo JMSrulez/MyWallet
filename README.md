@@ -59,8 +59,8 @@ La compatibilite depend des restrictions geographiques, modes de compte, permiss
 
 - Soldes `total` remontes par CCXT, incluant les fonds libres et bloques exposes par l'API.
 - Quantites et prix en EUR enregistres a chaque collecte. Aucun historique retroactif reel n'est invente.
-- Prix indicatifs publics Kraken : paire EUR directe, paire inverse, puis conversion USD/EUR. Un stablecoin n'est jamais assimile arbitrairement a 1 EUR ou 1 USD.
-- Si un actif non nul n'a pas de prix disponible, **tout le releve du compte echoue** : aucune valorisation partielle n'est enregistree.
+- Prix en EUR via **CoinGecko** (API simple/price). Cle optionnelle `COINGECKO_API_KEY` (type `demo` ou `pro`). Sans cle, l'API publique est utilisee avec des limites plus strictes. Cache local d'environ 60 secondes.
+- Si un actif non nul n'a pas de prix disponible, **tout le releve du compte echoue** : aucune valorisation partielle n'est enregistree. Les logs serveur indiquent le symbole concerne.
 - En cas d'echec d'un compte, son dernier releve est conserve et signale comme ancien. Les autres comptes continuent a etre collectes.
 - Le graphique global additionne les derniers releves connus a chaque instant ; ce ne sont pas necessairement des releves simultanes. Un nouveau compte commence a compter a son premier releve.
 - Les variations representent une variation de solde, **pas une performance d'investissement** : depots, retraits et transferts les affectent.
@@ -96,10 +96,21 @@ npm test
 
 Tests avec SQLite en memoire et APIs simulees : calcul global/individuel, non-chevauchement des collectes, echecs de prix, chiffrement authentifie, authentification, protection d'origine, export et suppression. Le build Docker execute aussi les tests avant de produire l'image finale.
 
-- [server/providers.js](server/providers.js) : adaptateurs CCXT et conversion de prix. Point d'extension pour d'autres exchanges.
+- [server/providers.js](server/providers.js) : adaptateurs CCXT (soldes) et prix CoinGecko. Point d'extension pour d'autres exchanges.
 - [server/collector.js](server/collector.js) : collecte independante des fournisseurs, injectables pour de futurs comptes en ligne.
 - [server/store.js](server/store.js) : comptes, releves, consolidation et stockage SQLite.
 - [server/app.js](server/app.js) : API Express et authentification.
 - [public/](public/) : interface JavaScript native, Chart.js et Lucide.
 
 Pour un futur fournisseur non crypto, implementer une lecture de soldes et une valorisation compatibles avec le collecteur, puis declarer ses champs et sa validation dans l'API/interface. Il n'est pas necessaire de changer le schema historique.
+
+## Prix (CoinGecko)
+
+Les valorisations en EUR passent par l'API CoinGecko, plus complete que les seuls marches Kraken.
+
+| Variable | Description |
+| --- | --- |
+| COINGECKO_API_KEY | Cle API (demo gratuite ou pro). Optionnelle. |
+| COINGECKO_API_TYPE | `demo` (defaut) ou `pro` |
+
+Sans cle, les appels publics restent possibles mais sont plus limites. Avec une cle demo, le header `x-cg-demo-api-key` est envoye. Les prix sont caches environ 60 secondes en memoire. Les symboles courants sont mappes explicitement ; les autres sont resolus via `/coins/list`.
