@@ -6,12 +6,135 @@ export const providers = [
   { id: "coinbase", name: "Coinbase", passphrase: false },
 ];
 
-export function createProviders(vault) {
-  const pricing = new ccxt.kraken({ enableRateLimit: true, timeout: 20000 });
+/** Symboles courants -> id CoinGecko (evite les collisions BTC/ETH/...). */
+const KNOWN_IDS = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  SOL: "solana",
+  XRP: "ripple",
+  ADA: "cardano",
+  DOGE: "dogecoin",
+  DOT: "polkadot",
+  AVAX: "avalanche-2",
+  LINK: "chainlink",
+  MATIC: "matic-network",
+  POL: "polygon-ecosystem-token",
+  LTC: "litecoin",
+  BCH: "bitcoin-cash",
+  ATOM: "cosmos",
+  UNI: "uniswap",
+  AAVE: "aave",
+  MKR: "maker",
+  CRV: "curve-dao-token",
+  SNX: "havven",
+  COMP: "compound-governance-token",
+  SUSHI: "sushi",
+  YFI: "yearn-finance",
+  USDT: "tether",
+  USDC: "usd-coin",
+  DAI: "dai",
+  EURC: "euro-coin",
+  EURT: "tether-eurt",
+  WBTC: "wrapped-bitcoin",
+  STETH: "staked-ether",
+  CBETH: "coinbase-wrapped-staked-eth",
+  RETH: "rocket-pool-eth",
+  WETH: "weth",
+  ARB: "arbitrum",
+  OP: "optimism",
+  APT: "aptos",
+  SUI: "sui",
+  NEAR: "near",
+  FIL: "filecoin",
+  ICP: "internet-computer",
+  HBAR: "hedera-hashgraph",
+  ALGO: "algorand",
+  XLM: "stellar",
+  TRX: "tron",
+  TON: "the-open-network",
+  SHIB: "shiba-inu",
+  PEPE: "pepe",
+  BONK: "bonk",
+  RENDER: "render-token",
+  FET: "fetch-ai",
+  INJ: "injective-protocol",
+  SEI: "sei-network",
+  TIA: "celestia",
+  PYTH: "pyth-network",
+  JUP: "jupiter-exchange-solana",
+  WIF: "dogwifcoin",
+  BNB: "binancecoin",
+};
+
+export function createProviders(vault, options = {}) {
+  const apiKey = options.coingeckoApiKey || process.env.COINGECKO_API_KEY || "";
+  const apiType = (
+    options.coingeckoApiType ||
+    process.env.COINGECKO_API_TYPE ||
+    "demo"
+  ).toLowerCase();
+
+  const baseUrl =
+    apiType === "pro"
+      ? "https://pro-api.coingecko.com/api/v3"
+      : "https://api.coingecko.com/api/v3";
+
+  const headers = { Accept: "application/json" };
+  if (apiKey) {
+    if (apiType === "pro") headers["x-cg-pro-api-key"] = apiKey;
+    else headers["x-cg-demo-api-key"] = apiKey;
+  }
+
+  let coinListPromise = null;
+  const priceCache = new Map();
+  const CACHE_TTL_MS = 60_000;
+
+  async function cgFetch(path) {
+    const url = `${baseUrl}${path}`;
+    const res = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`CoinGecko HTTP ${res.status}: ${body.slice(0, 200)}`);
+    }
+    return res.json();
+  }
+
+  async function loadCoinList() {
+    if (!coinListPromise) {
+      coinListPromise = cgFetch("/coins/list").then((list) => {
+        const bySymbol = new Map();
+        for (const coin of list) {
+          const sym = String(coin.symbol || "").toUpperCase();
+          if (!sym) continue;
+          if (!bySymbol.has(sym)) bySymbol.set(sym, []);
+          bySymbol.get(sym).push(coin);
+        }
+        console.log(`[prices] Liste CoinGecko chargee (${list.length} coins)`);
+        return bySymbol;
+      });
+    }
+    return coinListPromise;
+  }
+
+  async function resolveId(asset) {
+    const symbol = String(asset).toUpperCase();
+    if (KNOWN_IDS[symbol]) return KNOWN_IDS[symbol];
+    const bySymbol = await loadCoinList();
+    const candidates = bySymbol.get(symbol) || [];
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a.id.length - b.id.length);
+    return candidates[0].id;
+  }
+
   return {
     async readBalances(account) {
       const credentials = vault.decrypt(account.credentials);
       const Exchange = ccxt[account.provider];
+      if (!Exchange) throw new Error(`Fournisseur inconnu: ${account.provider}`);
+      console.log(`[${account.provider}] Lecture soldes: ${account.name}`);
       const client = new Exchange({
         ...credentials,
         enableRateLimit: true,
@@ -20,29 +143,57 @@ export function createProviders(vault) {
       });
       try {
         const balances = await client.fetchBalance();
+        const nonZero = Object.entries(balances.total || {}).filter(
+          ([, q]) => Number.isFinite(q) && q > 0,
+        );
+        console.log(
+          `[${account.provider}] ${account.name}: ${nonZero.length} actif(s) non nuls -> ${nonZero.map(([a]) => a).join(", ") || "(aucun)"}`,
+        );
         return balances.total;
       } finally {
         await client.close();
       }
     },
+
     async getPrice(asset) {
-      if (asset === "EUR") return 1;
-      await pricing.loadMarkets();
-      const rate = async (symbol) => {
-        const ticker = await pricing.fetchTicker(symbol);
-        if (!Number.isFinite(ticker.last) || ticker.last <= 0)
-          throw new Error("Price unavailable");
-        return ticker.last;
-      };
-      if (pricing.markets[`${asset}/EUR`]) return rate(`${asset}/EUR`);
-      if (pricing.markets[`EUR/${asset}`])
-        return 1 / (await rate(`EUR/${asset}`));
-      const usdToEur = 1 / (await rate("EUR/USD"));
-      if (asset === "USD") return usdToEur;
-      if (pricing.markets[`${asset}/USD`])
-        return (await rate(`${asset}/USD`)) * usdToEur;
-      throw new Error("Unsupported asset");
+      const symbol = String(asset).toUpperCase();
+      if (symbol === "EUR") return 1;
+
+      const cached = priceCache.get(symbol);
+      if (cached && cached.expires > Date.now()) return cached.price;
+
+      if (symbol === "USD") {
+        const data = await cgFetch(
+          "/simple/price?ids=tether&vs_currencies=eur",
+        );
+        const usdtEur = data?.tether?.eur;
+        if (!Number.isFinite(usdtEur) || usdtEur <= 0)
+          throw new Error("Prix USD/EUR indisponible");
+        const price = usdtEur;
+        priceCache.set(symbol, { price, expires: Date.now() + CACHE_TTL_MS });
+        return price;
+      }
+
+      const id = await resolveId(symbol);
+      if (!id)
+        throw new Error(
+          `Unsupported asset: ${symbol} (inconnu sur CoinGecko)`,
+        );
+
+      const data = await cgFetch(
+        `/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=eur`,
+      );
+      const price = data?.[id]?.eur;
+      if (!Number.isFinite(price) || price <= 0)
+        throw new Error(
+          `Unsupported asset: ${symbol} (pas de prix EUR pour ${id})`,
+        );
+
+      console.log(`[prices] ${symbol} (${id}) = ${price} EUR`);
+      priceCache.set(symbol, { price, expires: Date.now() + CACHE_TTL_MS });
+      return price;
     },
-    close: () => pricing.close(),
+
+    close: async () => {},
   };
 }
