@@ -55,11 +55,11 @@ const timer = demo
       () =>
         collector
           .collect()
-          .catch(() => console.error("Scheduled collection failed.")),
+          .catch((err) => console.error("Scheduled collection failed:", err?.message || err)),
       intervalMinutes * 60000,
     );
 if (!demo)
-  collector.collect().catch(() => console.error("Startup collection failed."));
+  collector.collect().catch((err) => console.error("Startup collection failed:", err?.message || err));
 let stopping = false;
 async function shutdown() {
   if (stopping) return;
