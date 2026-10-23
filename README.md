@@ -81,9 +81,24 @@ La compatibilite depend des restrictions geographiques, modes de compte, permiss
 | `PUBLIC_URL` | Origine du navigateur pour OAuth GoMining ; defaut `http://localhost:3080` (ou le port local configure), HTTPS pour un acces distant |
 | `GOMINING_GRAM_COINGECKO_ID` | Identifiant CoinGecko du GRAM du wallet, uniquement apres verification de l'actif ; sans valeur, un solde GRAM non nul fait echouer le releve plutot que deviner son prix |
 | `HOST` | Adresse d'ecoute ; defaut `0.0.0.0` |
+| `OKX_HOSTNAME` | Domaine API OKX : `eea.okx.com` pour les comptes europeens, `us.okx.com` pour les Etats-Unis, `www.okx.com` ailleurs (defaut si absent) |
 | `DEMO_MODE` | `true` active la demo publique en lecture seule ; desactive dans Compose |
 
 Les cles sont chiffrees dans la base ; elles ne sont jamais renvoyees au navigateur. Les sessions sont en memoire, durent 12 heures et sont invalidees au redemarrage. Les cookies sont HttpOnly/SameSite Strict. Cinq echecs de connexion bloquent une adresse IP pendant 15 minutes. Les requetes de modification exigent du JSON et verifient l'origine.
+
+### OKX : erreur 50119 (API key doesn't exist)
+
+MyWallet utilisait uniquement le domaine mondial `www.okx.com`. Une cle d'un compte europeen peut donc etre refusee meme si elle est valide. [La FAQ officielle OKX](https://www.okx.com/help/api-faq) demande le domaine `eea.okx.com` pour l'EEE et `us.okx.com` pour les Etats-Unis.
+
+Pour un compte europeen, ajouter dans le fichier `.env` existant :
+
+```dotenv
+OKX_HOSTNAME=eea.okx.com
+```
+
+Puis reconstruire et recreer le conteneur avec `docker compose up -d --build` (ou redemarrer `npm start` en local), et cliquer sur **Actualiser**. Les comptes et leur historique sont conserves ; il n'est pas necessaire de recreer le compte dans MyWallet. Ne pas remplacer le fichier `.env` existant ni sa cle `ENCRYPTION_KEY`.
+
+Le domaine correspond au compte OKX, pas a l'emplacement du serveur MyWallet. Si l'erreur persiste avec le domaine approprie, verifier que la cle est toujours active et qu'elle appartient au compte reel attendu.
 
 ## Sauvegarde
 
