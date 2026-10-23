@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createStore, buildPortfolio } from "../server/store.js";
 import { createCollector } from "../server/collector.js";
+import { createVault } from "../server/security.js";
+import { randomBytes } from "node:crypto";
 
 function addAccount(store, id) {
   store.addAccount({
@@ -12,6 +14,40 @@ function addAccount(store, id) {
     created_at: "2026-01-01T00:00:00Z",
   });
 }
+
+test("OAuth credentials can be refreshed without exposing tokens or recreating deleted accounts", () => {
+  const store = createStore();
+  const vault = createVault(randomBytes(32).toString("base64"));
+  try {
+    addAccount(store, "oauth");
+    const tokens = {
+      access_token: "test-access",
+      refresh_token: "test-refresh",
+    };
+    assert.equal(
+      store.updateCredentials("oauth", vault.encrypt({ tokens })),
+      1,
+    );
+    assert.deepEqual(vault.decrypt(store.account("oauth").credentials), {
+      tokens,
+    });
+    assert.equal(
+      store.account("oauth").credentials.includes("test-access"),
+      false,
+    );
+    assert.equal(
+      JSON.stringify(buildPortfolio(store)).includes("test-refresh"),
+      false,
+    );
+    store.removeAccount("oauth");
+    assert.equal(
+      store.updateCredentials("oauth", vault.encrypt({ tokens })),
+      0,
+    );
+  } finally {
+    store.close();
+  }
+});
 
 test("collects all balances including held funds and builds individual/global history", async () => {
   const store = createStore();

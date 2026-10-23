@@ -6,6 +6,7 @@ import { createCollector } from "./collector.js";
 import { createProviders } from "./providers.js";
 import { createApp } from "./app.js";
 import { seedDemo } from "./demo.js";
+import { createGoMining } from "./gomining.js";
 
 const demo =
   process.argv.includes("--demo") || process.env.DEMO_MODE === "true";
@@ -20,7 +21,16 @@ const store = createStore(
   path.join(directory, demo ? "demo.sqlite" : "wallet.sqlite"),
 );
 const vault = demo ? null : createVault(process.env.ENCRYPTION_KEY);
-const adapters = demo ? null : createProviders(vault);
+const gomining = demo
+  ? null
+  : createGoMining({
+      store,
+      vault,
+      publicUrl:
+        process.env.PUBLIC_URL ||
+        `http://localhost:${process.env.PORT || 3080}`,
+    });
+const adapters = demo ? null : createProviders(vault, { gomining });
 if (demo) seedDemo(store);
 const collector = createCollector({
   store,
@@ -43,6 +53,7 @@ const app = createApp({
   demo,
   intervalMinutes,
   secureCookie: process.env.COOKIE_SECURE === "true",
+  gomining,
 });
 const server = app.listen(port, process.env.HOST || "0.0.0.0", () =>
   console.log(
@@ -55,11 +66,17 @@ const timer = demo
       () =>
         collector
           .collect()
-          .catch((err) => console.error("Scheduled collection failed:", err?.message || err)),
+          .catch((err) =>
+            console.error("Scheduled collection failed:", err?.message || err),
+          ),
       intervalMinutes * 60000,
     );
 if (!demo)
-  collector.collect().catch((err) => console.error("Startup collection failed:", err?.message || err));
+  collector
+    .collect()
+    .catch((err) =>
+      console.error("Startup collection failed:", err?.message || err),
+    );
 let stopping = false;
 async function shutdown() {
   if (stopping) return;

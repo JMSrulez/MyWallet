@@ -50,6 +50,7 @@ Creer des cles **en lecture seule**, sans trading, transfert ni retrait. Restrei
 | OKX | Cle API, secret et passphrase | Compte trading spot, selon le mode de compte OKX |
 | Kraken | Cle API et secret, permission de consultation des fonds | Soldes spot |
 | Coinbase | Cle API CDP et cle privee **ECDSA** au format PEM, droits de lecture | Soldes accessibles par Coinbase Advanced via CCXT |
+| GoMining | Consentement OAuth via le compte GoMining, sans cle API manuelle | Wallet virtuel via MCP, en lecture seule |
 
 Pour Coinbase, le nom complet de cle peut avoir la forme `organizations/.../apiKeys/...`. Conserver les lignes PEM ; les retours a la ligne echappes `\n` sont aussi acceptes. Utiliser une cle ECDSA compatible CCXT, pas une cle Ed25519. Si necessaire, creer une cle par portefeuille/sous-compte.
 
@@ -77,6 +78,8 @@ La compatibilite depend des restrictions geographiques, modes de compte, permiss
 | `COOKIE_SECURE` | `true` pour HTTPS ; defaut `false` pour localhost |
 | `DATA_DIR` | Repertoire SQLite ; `./data` en local, `/app/data` dans Docker |
 | `PORT` | Port local ; defaut 3080, fixe dans Compose |
+| `PUBLIC_URL` | Origine du navigateur pour OAuth GoMining ; defaut `http://localhost:3080` (ou le port local configure), HTTPS pour un acces distant |
+| `GOMINING_GRAM_COINGECKO_ID` | Identifiant CoinGecko du GRAM du wallet, uniquement apres verification de l'actif ; sans valeur, un solde GRAM non nul fait echouer le releve plutot que deviner son prix |
 | `HOST` | Adresse d'ecoute ; defaut `0.0.0.0` |
 | `DEMO_MODE` | `true` active la demo publique en lecture seule ; desactive dans Compose |
 
@@ -114,3 +117,24 @@ Les valorisations en EUR passent par l'API CoinGecko, plus complete que les seul
 | COINGECKO_API_TYPE | `demo` (defaut) ou `pro` |
 
 Sans cle, les appels publics restent possibles mais sont plus limites. Avec une cle demo, le header `x-cg-demo-api-key` est envoye. Les prix sont caches environ 60 secondes en memoire. Les symboles courants sont mappes explicitement ; les autres sont resolus via `/coins/list`.
+
+## Compte GoMining (MCP et OAuth)
+
+1. Ouvrir MyWallet a l'origine `PUBLIC_URL` configuree. Par exemple `http://localhost:3080`, ou `https://wallet.example.com` derriere un reverse proxy HTTPS. Une origine HTTP distante est refusee. Ne pas utiliser `127.0.0.1` dans le navigateur si `PUBLIC_URL` utilise `localhost`.
+2. Se connecter a MyWallet, puis choisir **Ajouter un compte > GoMining**, saisir un nom et continuer vers le consentement. Se connecter directement chez GoMining ; ne jamais saisir de seed phrase, cle privee ou mot de passe GoMining dans MyWallet.
+3. Le serveur MCP utilise est fixe : `https://mcp.gomining.com/mcp`. Le SDK officiel decouvre le serveur OAuth et enregistre dynamiquement le client. Le retour est `PUBLIC_URL/oauth/gomining/callback`.
+4. Apres le consentement, MyWallet verifie l'etat OAuth, la session locale, PKCE et l'emetteur avec le SDK. Il se reconnecte sur un transport neuf, decouvre les outils et verifie le schema de `get_virtual_wallet_balances` avant de l'appeler. Le compte n'est cree qu'apres une reponse de wallet valide, puis une premiere collecte est declenchee.
+
+Le SDK gere le renouvellement des jetons. Les jetons d'acces, refresh tokens et informations du client OAuth restent chiffres dans SQLite avec `ENCRYPTION_KEY` ; ils ne sont jamais renvoyes a l'interface ni journalises par le connecteur. Le retour navigateur transporte seulement un code temporaire et un etat OAuth, retires de l'URL avant l'echange. Conserver `PUBLIC_URL` et la cle de chiffrement entre les redemarrages. Les consentements en cours expirent apres 10 minutes et sont perdus au redemarrage ; il suffit de recommencer la connexion. Si la session MyWallet expire pendant le consentement, recommencer depuis une nouvelle session.
+
+Dans **Mes comptes**, le bouton avec l'icone de lien renouvelle l'autorisation du compte existant sans supprimer son historique. La suppression locale efface les jetons et releves ; pour revoquer aussi l'acces chez GoMining, retirer MyWallet des applications autorisees dans GoMining si cette option est proposee. Le mode demo interdit les connexions reelles.
+
+### Perimetre et valorisation
+
+- Seul `get_virtual_wallet_balances` est appele. `get_account_summary`, miners/NFT, staking, carte et recompenses ne sont pas additionnes : cela evite d'inventer une valorisation ou de compter deux fois des soldes.
+- Les actifs documentes sont BTC, GMT, USDT, USDC, ETH, BNB, SOL et GRAM. Le GMT de ce fournisseur est normalise en **GOMINING**, avec le prix CoinGecko `gmt-token`, et n'est pas confondu avec le GMT de STEPN.
+- GRAM est ambigu dans les catalogues publics. Configurer `GOMINING_GRAM_COINGECKO_ID` seulement apres confirmation de son identite ; sinon la collecte conserve le dernier releve connu et affiche une erreur si le wallet contient du GRAM non nul.
+- Un outil qui exige des arguments inconnus, un resultat MCP en erreur ou un format de solde non reconnu est refuse. Seuls des soldes JSON explicites sont acceptes (contenu structure ou bloc texte JSON, dictionnaire d'actifs ou tableau de lignes avec actif et quantite). Une reponse inconnue n'est pas transformee en zero. Les schemas JSON Schema draft-07 et 2020-12 sont pris en charge.
+- Les champs exacts du serveur GoMining ne sont pas publies dans sa documentation. Les tests utilisent des fixtures et le SDK reel contre un serveur simule, pas un compte GoMining reel. La compatibilite du consentement, des schemas et du format de reponse doit etre confirmee avec votre compte ; si le schema differe, le connecteur echoue explicitement et doit etre adapte.
+
+Le client n'utilise aucun modele de langage et n'appelle aucun outil d'ecriture, meme si de futurs outils MCP le permettent. Sources : [documentation officielle GoMining](https://docs.gomining.com/en/product/ai/mcp-server), [OAuth du SDK officiel MCP](https://ts.sdk.modelcontextprotocol.io/v2/clients/oauth.html). Implementation : [server/gomining.js](server/gomining.js), tests : [test/gomining.test.js](test/gomining.test.js).

@@ -126,7 +126,12 @@ test("demo rejects account changes and collections", async () => {
   try {
     const base = `http://127.0.0.1:${server.address().port}`;
     assert.equal((await fetch(`${base}/api/portfolio`)).status, 200);
-    for (const route of ["/api/accounts", "/api/collect"]) {
+    for (const route of [
+      "/api/accounts",
+      "/api/collect",
+      "/api/gomining/authorize",
+      "/api/gomining/callback",
+    ]) {
       assert.equal(
         (
           await fetch(base + route, {
@@ -138,6 +143,11 @@ test("demo rejects account changes and collections", async () => {
         403,
       );
     }
+    assert.equal(
+      (await fetch(`${base}/oauth/gomining/callback?code=fake&state=fake`))
+        .status,
+      404,
+    );
   } finally {
     await new Promise((resolve) => server.close(resolve));
     store.close();

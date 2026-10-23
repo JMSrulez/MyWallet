@@ -14,6 +14,8 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
+    "ajv": "^8.20.0",
     "ccxt": "^4.5.0",
     "chart.js": "^4.5.0",
     "express": "^5.1.0",

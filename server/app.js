@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { buildPortfolio } from "./store.js";
 import { passwordsMatch } from "./security.js";
 import { providers } from "./providers.js";
+import { GoMiningError } from "./gomining.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -17,6 +18,7 @@ export function createApp({
   demo = false,
   intervalMinutes = 60,
   secureCookie = false,
+  gomining,
 }) {
   const app = express();
   const sessions = new Map();
@@ -142,19 +144,86 @@ export function createApp({
   });
   app.use("/api", (req, res, next) =>
     demo && req.method !== "GET"
-      ? res
-          .status(403)
-          .json({
-            error: "Les donnees de demonstration sont en lecture seule.",
-          })
+      ? res.status(403).json({
+          error: "Les donnees de demonstration sont en lecture seule.",
+        })
       : next(),
   );
+  const oauthError = (res, error) =>
+    res.status(400).json({
+      error:
+        error instanceof GoMiningError
+          ? error.message
+          : "GoMining: connexion impossible. Reessayez plus tard.",
+    });
+  app.post("/api/gomining/authorize", async (req, res) => {
+    if (!gomining)
+      return res.status(503).json({ error: "GoMining indisponible." });
+    if (collector.running)
+      return res.status(409).json({ error: "Une collecte est en cours." });
+    const origin = req.get("origin");
+    if (origin && origin !== new URL(gomining.redirectUrl).origin) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "Ouvrez MyWallet a l'adresse PUBLIC_URL configuree avant de connecter GoMining.",
+        });
+    }
+    const { name, accountId } = req.body ?? {};
+    if (accountId !== undefined && typeof accountId !== "string")
+      return res.status(400).json({ error: "Compte invalide." });
+    try {
+      const account = accountId ? store.account(accountId) : null;
+      res.json(
+        await gomining.begin({
+          name: account?.name ?? name,
+          accountId,
+          session: req.sessionToken,
+        }),
+      );
+    } catch (error) {
+      oauthError(res, error);
+    }
+  });
+  app.post("/api/gomining/callback", async (req, res) => {
+    if (!gomining)
+      return res.status(503).json({ error: "GoMining indisponible." });
+    if (collector.running)
+      return res
+        .status(409)
+        .json({
+          error: "Une collecte est en cours. Reconnectez GoMining ensuite.",
+        });
+    const params = new URLSearchParams();
+    for (const key of ["state", "code", "iss", "error"]) {
+      const value = req.body?.[key];
+      if (value !== undefined) {
+        if (typeof value !== "string" || value.length > 4096)
+          return res.status(400).json({ error: "Retour OAuth invalide." });
+        params.set(key, value);
+      }
+    }
+    try {
+      res
+        .status(201)
+        .json(await gomining.complete({ params, session: req.sessionToken }));
+    } catch (error) {
+      oauthError(res, error);
+    }
+  });
   app.post("/api/accounts", (req, res) => {
     if (collector.running)
       return res
         .status(409)
         .json({ error: "Une collecte est en cours. Reessayez ensuite." });
     const { name, provider, apiKey, secret, passphrase } = req.body ?? {};
+    if (provider === "gomining")
+      return res
+        .status(400)
+        .json({
+          error: "GoMining utilise une autorisation OAuth, pas des cles API.",
+        });
     if (
       typeof name !== "string" ||
       !name.trim() ||
@@ -208,6 +277,24 @@ export function createApp({
   app.use("/api", (req, res) =>
     res.status(404).json({ error: "Route introuvable." }),
   );
+  app.get("/oauth/gomining/callback", (req, res) => {
+    res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
+    if (demo || !gomining)
+      return res.status(404).send("GoMining indisponible.");
+    const params = new URLSearchParams();
+    for (const key of ["state", "code", "iss", "error"]) {
+      const value = req.query[key];
+      if (value !== undefined) {
+        if (typeof value !== "string" || value.length > 4096)
+          return res.status(400).send("Retour OAuth invalide.");
+        params.set(key, value);
+      }
+    }
+    res.redirect(
+      303,
+      `${new URL(gomining.redirectUrl).origin}/#gomining-callback?${params}`,
+    );
+  });
   app.get("/health", (req, res) => res.json({ status: "ok" }));
   app.get("/vendor/chart.js", (req, res) =>
     res.sendFile(path.join(root, "node_modules/chart.js/dist/chart.umd.js")),
@@ -218,14 +305,12 @@ export function createApp({
   app.use(express.static(path.join(root, "public")));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
-    res
-      .status(error.status === 400 ? 400 : 500)
-      .json({
-        error:
-          error.status === 400
-            ? "Requete invalide."
-            : "Erreur interne. Reessayez plus tard.",
-      });
+    res.status(error.status === 400 ? 400 : 500).json({
+      error:
+        error.status === 400
+          ? "Requete invalide."
+          : "Erreur interne. Reessayez plus tard.",
+    });
   });
   return app;
 }

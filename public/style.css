@@ -820,6 +820,10 @@ main {
   background: #eaf0ff;
   color: #3967df;
 }
+.provider-gomining {
+  background: #eaf2dc;
+  color: #648234;
+}
 .provider-logo svg {
   width: 18px;
   height: 18px;

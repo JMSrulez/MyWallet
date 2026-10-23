@@ -234,9 +234,7 @@
                   Mes comptes
                   <span id="section-account-count" class="count-badge">0</span>
                 </h2>
-                <span class="section-description"
-                  >Comptes spot</span
-                >
+                <span class="section-description">Exchanges et wallets</span>
               </div>
               <a href="#accounts" class="text-link"
                 >Voir les comptes <i data-lucide="arrow-up-right"></i
@@ -374,7 +372,7 @@
                 </div>
                 <div>
                   <dt>P&eacute;rim&egrave;tre des comptes</dt>
-                  <dd>Soldes spot</dd>
+                  <dd>Spot et wallet GoMining</dd>
                 </div>
                 <div>
                   <dt>Historique</dt>
@@ -419,7 +417,8 @@
         ><select name="provider" id="provider">
           <option value="okx">OKX</option>
           <option value="kraken">Kraken</option>
-          <option value="coinbase">Coinbase</option></select
+          <option value="coinbase">Coinbase</option>
+          <option value="gomining">GoMining</option></select
         ><label for="account-name">Nom du compte</label
         ><input
           id="account-name"
@@ -428,37 +427,40 @@
           maxlength="60"
           placeholder="Mon compte OKX"
           autocomplete="off"
-        /><label for="api-key">Cl&eacute; API</label
-        ><input
-          id="api-key"
-          name="apiKey"
-          required
-          maxlength="4096"
-          autocomplete="off"
-          spellcheck="false"
-        /><label for="api-secret" id="secret-label">Secret API</label
-        ><textarea
-          id="api-secret"
-          name="secret"
-          rows="3"
-          required
-          maxlength="8192"
-          autocomplete="off"
-          spellcheck="false"
-        ></textarea>
-        <div id="passphrase-field">
-          <label for="passphrase">Passphrase OKX</label
+        />
+        <div id="api-credentials">
+          <label for="api-key">Cl&eacute; API</label
           ><input
-            id="passphrase"
-            name="passphrase"
-            type="password"
-            maxlength="1024"
+            id="api-key"
+            name="apiKey"
+            required
+            maxlength="4096"
             autocomplete="off"
-          />
+            spellcheck="false"
+          /><label for="api-secret" id="secret-label">Secret API</label
+          ><textarea
+            id="api-secret"
+            name="secret"
+            rows="3"
+            required
+            maxlength="8192"
+            autocomplete="off"
+            spellcheck="false"
+          ></textarea>
+          <div id="passphrase-field">
+            <label for="passphrase">Passphrase OKX</label
+            ><input
+              id="passphrase"
+              name="passphrase"
+              type="password"
+              maxlength="1024"
+              autocomplete="off"
+            />
+          </div>
         </div>
         <div class="security-note">
           <i data-lucide="shield-check"></i
-          ><span
+          ><span id="connection-security"
             >Droits de lecture seule uniquement. Aucun droit de trading ou de
             retrait.</span
           >
@@ -472,7 +474,8 @@
           >
             Annuler</button
           ><button type="submit" class="button primary">
-            <i data-lucide="link"></i> Connecter le compte
+            <i data-lucide="link"></i
+            ><span id="connect-account-label">Connecter le compte</span>
           </button>
         </div>
       </form>

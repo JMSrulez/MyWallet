@@ -4,6 +4,7 @@ export const providers = [
   { id: "okx", name: "OKX", passphrase: true },
   { id: "kraken", name: "Kraken", passphrase: false },
   { id: "coinbase", name: "Coinbase", passphrase: false },
+  { id: "gomining", name: "GoMining", authType: "oauth", scope: "wallet" },
 ];
 
 /** Symboles courants -> id CoinGecko (evite les collisions BTC/ETH/...). */
@@ -64,9 +65,14 @@ const KNOWN_IDS = {
   JUP: "jupiter-exchange-solana",
   WIF: "dogwifcoin",
   BNB: "binancecoin",
+  GOMINING: "gmt-token",
 };
 
 export function createProviders(vault, options = {}) {
+  const gramId =
+    options.gominingGramId || process.env.GOMINING_GRAM_COINGECKO_ID;
+  if (gramId && !/^[a-z0-9-]{1,100}$/.test(gramId))
+    throw new Error("Invalid GOMINING_GRAM_COINGECKO_ID.");
   const apiKey = options.coingeckoApiKey || process.env.COINGECKO_API_KEY || "";
   const apiType = (
     options.coingeckoApiType ||
@@ -131,9 +137,15 @@ export function createProviders(vault, options = {}) {
 
   return {
     async readBalances(account) {
+      if (account.provider === "gomining") {
+        if (!options.gomining)
+          throw new Error("GoMining: connecteur indisponible.");
+        return options.gomining.readBalances(account);
+      }
       const credentials = vault.decrypt(account.credentials);
       const Exchange = ccxt[account.provider];
-      if (!Exchange) throw new Error(`Fournisseur inconnu: ${account.provider}`);
+      if (!Exchange)
+        throw new Error(`Fournisseur inconnu: ${account.provider}`);
       console.log(`[${account.provider}] Lecture soldes: ${account.name}`);
       const client = new Exchange({
         ...credentials,
@@ -174,11 +186,13 @@ export function createProviders(vault, options = {}) {
         return price;
       }
 
-      const id = await resolveId(symbol);
-      if (!id)
+      if (symbol === "GRAM" && !gramId)
         throw new Error(
-          `Unsupported asset: ${symbol} (inconnu sur CoinGecko)`,
+          "GoMining: prix GRAM non configure (GOMINING_GRAM_COINGECKO_ID).",
         );
+      const id = symbol === "GRAM" ? gramId : await resolveId(symbol);
+      if (!id)
+        throw new Error(`Unsupported asset: ${symbol} (inconnu sur CoinGecko)`);
 
       const data = await cgFetch(
         `/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=eur`,

@@ -18,7 +18,12 @@ const dateFormat = new Intl.DateTimeFormat("fr-FR", {
   hour: "2-digit",
   minute: "2-digit",
 });
-const providerNames = { okx: "OKX", kraken: "Kraken", coinbase: "Coinbase" };
+const providerNames = {
+  okx: "OKX",
+  kraken: "Kraken",
+  coinbase: "Coinbase",
+  gomining: "GoMining",
+};
 const colors = [
   "#248b70",
   "#9180ba",
@@ -35,6 +40,7 @@ const assetInfo = {
   USDC: { name: "USD Coin", image: "6319/small/usdc.png" },
   EUR: { name: "Euro" },
   USD: { name: "Dollar am\u00e9ricain" },
+  GOMINING: { name: "GoMining Token" },
 };
 const state = {
   portfolio: null,
@@ -48,6 +54,10 @@ const state = {
 let historyChart;
 let allocationChart;
 let toastTimer;
+let goMiningCallback = location.hash.startsWith("#gomining-callback?")
+  ? new URLSearchParams(location.hash.slice("#gomining-callback?".length))
+  : null;
+if (goMiningCallback) history.replaceState(null, "", "/#accounts");
 const escapeHtml = (value) =>
   String(value).replace(
     /[&<>"']/g,
@@ -60,8 +70,10 @@ const icons = () => lucide.createIcons({ attrs: { "aria-hidden": "true" } });
 const icon = (name, className = "") =>
   `<i data-lucide="${name}" class="${className}"></i>`;
 const accountName = (account) => escapeHtml(account.name);
+const accountScope = (account) =>
+  account.provider === "gomining" ? "Wallet" : "Spot";
 const providerLogo = (provider) =>
-  `<span class="provider-logo provider-${provider}">${icon(provider === "okx" ? "blocks" : provider === "kraken" ? "waves" : "circle-dollar-sign")}</span>`;
+  `<span class="provider-logo provider-${provider}">${icon(provider === "okx" ? "blocks" : provider === "kraken" ? "waves" : provider === "gomining" ? "pickaxe" : "circle-dollar-sign")}</span>`;
 
 async function api(route, options = {}) {
   const response = await fetch(`/api${route}`, {
@@ -382,7 +394,7 @@ function renderAccountCards() {
     state.portfolio.accounts
       .map(
         (account) =>
-          `<button class="account-card ${state.account === account.id ? "selected" : ""}" data-select-account="${account.id}" title="Afficher le graphique de ${accountName(account)}"><div class="account-card-top">${providerLogo(account.provider)}<span class="account-card-title"><strong>${accountName(account)}</strong><span>${providerNames[account.provider]} &middot; Spot</span></span>${icon("arrow-up-right", "card-arrow")}</div><div class="card-value money">${account.snapshot ? decimal.format(account.snapshot.total) : "\u2014"} <small>EUR</small></div><div class="card-bottom"><span class="connected ${account.last_error ? "issue" : ""}"><span class="status-dot"></span>${state.session.demo ? "D\u00e9monstration" : account.last_error ? "\u00c0 v\u00e9rifier" : account.snapshot ? "Synchronis\u00e9" : "En attente"}</span><span>${account.snapshot ? dateFormat.format(new Date(account.snapshot.captured_at)) : "Aucun relev\u00e9"}</span></div></button>`,
+          `<button class="account-card ${state.account === account.id ? "selected" : ""}" data-select-account="${account.id}" title="Afficher le graphique de ${accountName(account)}"><div class="account-card-top">${providerLogo(account.provider)}<span class="account-card-title"><strong>${accountName(account)}</strong><span>${providerNames[account.provider]} &middot; ${accountScope(account)}</span></span>${icon("arrow-up-right", "card-arrow")}</div><div class="card-value money">${account.snapshot ? decimal.format(account.snapshot.total) : "\u2014"} <small>EUR</small></div><div class="card-bottom"><span class="connected ${account.last_error ? "issue" : ""}"><span class="status-dot"></span>${state.session.demo ? "D\u00e9monstration" : account.last_error ? "\u00c0 v\u00e9rifier" : account.snapshot ? "Synchronis\u00e9" : "En attente"}</span><span>${account.snapshot ? dateFormat.format(new Date(account.snapshot.captured_at)) : "Aucun relev\u00e9"}</span></div></button>`,
       )
       .join("") ||
     `<button class="no-data-card" data-add-account>${icon("plus")} Ajouter mon premier compte</button>`;
@@ -440,7 +452,7 @@ function renderAccountList() {
   $("#account-list").innerHTML = state.portfolio.accounts
     .map(
       (account) =>
-        `<article class="account-detail"><div class="account-card-top">${providerLogo(account.provider)}<div class="account-card-title"><strong>${accountName(account)}</strong><span>${providerNames[account.provider]} &middot; Spot</span><a href="#overview" class="text-link" data-select-account="${account.id}">Voir l'historique ${icon("arrow-up-right")}</a></div></div><div class="account-detail-meta"><div class="account-detail-value"><strong class="money">${account.snapshot ? euro.format(account.snapshot.total) : "\u2014"}</strong><span>${account.snapshot ? dateFormat.format(new Date(account.snapshot.captured_at)) : "Aucun relev\u00e9"}</span></div><button class="icon-button" data-delete-account="${account.id}" title="Supprimer ${accountName(account)}" aria-label="Supprimer ${accountName(account)}" ${state.session.demo ? "disabled" : ""}>${icon("trash-2")}</button></div>${account.last_error ? `<p class="account-detail-error">${icon("triangle-alert")}${escapeHtml(account.last_error)}</p>` : ""}</article>`,
+        `<article class="account-detail"><div class="account-card-top">${providerLogo(account.provider)}<div class="account-card-title"><strong>${accountName(account)}</strong><span>${providerNames[account.provider]} &middot; ${accountScope(account)}</span><a href="#overview" class="text-link" data-select-account="${account.id}">Voir l'historique ${icon("arrow-up-right")}</a></div></div><div class="account-detail-meta"><div class="account-detail-value"><strong class="money">${account.snapshot ? euro.format(account.snapshot.total) : "\u2014"}</strong><span>${account.snapshot ? dateFormat.format(new Date(account.snapshot.captured_at)) : "Aucun relev\u00e9"}</span></div>${account.provider === "gomining" ? `<button class="icon-button" data-reconnect-gomining="${account.id}" title="Renouveler la connexion GoMining" aria-label="Renouveler la connexion GoMining" ${state.session.demo ? "disabled" : ""}>${icon("link-2")}</button>` : ""}<button class="icon-button" data-delete-account="${account.id}" title="Supprimer ${accountName(account)}" aria-label="Supprimer ${accountName(account)}" ${state.session.demo ? "disabled" : ""}>${icon("trash-2")}</button></div>${account.last_error ? `<p class="account-detail-error">${icon("triangle-alert")}${escapeHtml(account.last_error)}</p>` : ""}</article>`,
     )
     .join("");
 }
@@ -519,6 +531,17 @@ function openAccount() {
 
 function updateProvider() {
   const provider = $("#provider").value;
+  const oauth = provider === "gomining";
+  $("#api-credentials").hidden = oauth;
+  $$("#api-credentials input, #api-credentials textarea").forEach((field) => {
+    field.disabled = oauth;
+  });
+  $("#connection-security").textContent = oauth
+    ? "Autorisation GoMining en lecture seule."
+    : "Droits de lecture seule uniquement. Aucun droit de trading ou de retrait.";
+  $("#connect-account-label").textContent = oauth
+    ? "Continuer avec GoMining"
+    : "Connecter le compte";
   $("#passphrase-field").hidden = provider !== "okx";
   $("#passphrase").required = provider === "okx";
   $("#account-name").placeholder = `Mon compte ${providerNames[provider]}`;
@@ -526,6 +549,30 @@ function updateProvider() {
     provider === "coinbase"
       ? "Cl\u00e9 priv\u00e9e CDP (ECDSA / PEM)"
       : "Secret API";
+}
+
+async function authorizeGoMining({ name, accountId }) {
+  const result = await api("/gomining/authorize", {
+    method: "POST",
+    body: JSON.stringify({ name, accountId }),
+  });
+  location.assign(result.authorizationUrl);
+}
+
+async function finishGoMining() {
+  const params = goMiningCallback;
+  goMiningCallback = null;
+  try {
+    toast("Validation de la connexion GoMining...");
+    await api("/gomining/callback", {
+      method: "POST",
+      body: JSON.stringify(Object.fromEntries(params)),
+    });
+    await loadPortfolio();
+    await collect();
+  } catch (error) {
+    showError(error);
+  }
 }
 
 async function collect() {
@@ -594,6 +641,10 @@ $("#account-form").addEventListener("submit", async (event) => {
   event.submitter.disabled = true;
   $("#account-error").textContent = "";
   try {
+    if ($("#provider").value === "gomining") {
+      await authorizeGoMining({ name: $("#account-name").value });
+      return;
+    }
     await api("/accounts", {
       method: "POST",
       body: JSON.stringify(Object.fromEntries(new FormData(event.target))),
@@ -639,6 +690,16 @@ document.addEventListener("click", (event) => {
     state.deleting = remove.dataset.deleteAccount;
     $("#delete-error").textContent = "";
     $("#confirm-dialog").showModal();
+  }
+  const reconnect = event.target.closest("[data-reconnect-gomining]");
+  if (reconnect && !state.session.demo) {
+    reconnect.disabled = true;
+    authorizeGoMining({ accountId: reconnect.dataset.reconnectGomining }).catch(
+      (error) => {
+        reconnect.disabled = false;
+        showError(error);
+      },
+    );
   }
   const period = event.target.closest("[data-period]");
   if (period) {
@@ -724,6 +785,7 @@ async function initialize() {
       : "Personnel";
     navigate();
     await loadPortfolio();
+    if (goMiningCallback) await finishGoMining();
   } catch (error) {
     $("#boot").hidden = true;
     if (!state.portfolio && !state.session?.authenticated) {

@@ -32,6 +32,11 @@ export function createStore(filename = ":memory:") {
         account.created_at,
       );
     },
+    updateCredentials(id, credentials) {
+      return db
+        .prepare("UPDATE accounts SET credentials = ? WHERE id = ?")
+        .run(credentials, id).changes;
+    },
     removeAccount(id) {
       return db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes;
     },
