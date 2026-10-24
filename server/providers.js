@@ -69,6 +69,9 @@ const KNOWN_IDS = {
 };
 
 export function createProviders(vault, options = {}) {
+  const okxHostname = options.okxHostname ?? process.env.OKX_HOSTNAME ?? "www.okx.com";
+  if (!["www.okx.com", "eea.okx.com", "us.okx.com"].includes(okxHostname))
+    throw new Error("OKX_HOSTNAME must be www.okx.com, eea.okx.com or us.okx.com.");
   const gramId =
     options.gominingGramId || process.env.GOMINING_GRAM_COINGECKO_ID;
   if (gramId && !/^[a-z0-9-]{1,100}$/.test(gramId))
@@ -149,6 +152,7 @@ export function createProviders(vault, options = {}) {
       console.log(`[${account.provider}] Lecture soldes: ${account.name}`);
       const client = new Exchange({
         ...credentials,
+        ...(account.provider === "okx" ? { hostname: okxHostname } : {}),
         enableRateLimit: true,
         timeout: 20000,
         options: { defaultType: "spot" },
