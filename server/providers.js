@@ -155,13 +155,30 @@ export function createProviders(vault, options = {}) {
       });
       try {
         const balances = await client.fetchBalance();
-        const nonZero = Object.entries(balances.total || {}).filter(
+        let totals = balances.total;
+        if (account.provider === "kraken" && totals) {
+          const combined = new Map();
+          for (const [asset, quantity] of Object.entries(totals)) {
+            if (!Number.isFinite(quantity))
+              throw new Error(`Solde invalide pour ${asset}`);
+            // Kraken reports separate staking/rewards balances for the same coin.
+            // Only documented balance suffixes are folded; tokenized .T assets
+            // and unknown suffixes must keep their distinct identity.
+            const symbol = asset.replace(/^([^.]+)\.(?:S|M|B|F|P)$/, "$1");
+            const total = (combined.get(symbol) ?? 0) + quantity;
+            if (!Number.isFinite(total))
+              throw new Error(`Solde invalide pour ${symbol}`);
+            combined.set(symbol, total);
+          }
+          totals = Object.fromEntries(combined);
+        }
+        const nonZero = Object.entries(totals || {}).filter(
           ([, q]) => Number.isFinite(q) && q > 0,
         );
         console.log(
           `[${account.provider}] ${account.name}: ${nonZero.length} actif(s) non nuls -> ${nonZero.map(([a]) => a).join(", ") || "(aucun)"}`,
         );
-        return balances.total;
+        return totals;
       } finally {
         await client.close();
       }
