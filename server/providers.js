@@ -1,6 +1,7 @@
 import ccxt from "ccxt";
 import { holdingValue } from "./holdings.js";
 import { createEthereum, isEthereumToken } from "./ethereum.js";
+import { createViaBtc } from "./viabtc.js";
 
 export const providers = [
   { id: "okx", name: "OKX", passphrase: true },
@@ -8,6 +9,7 @@ export const providers = [
   { id: "coinbase", name: "Coinbase", passphrase: false },
   { id: "gomining", name: "GoMining", authType: "oauth", scope: "wallet" },
   { id: "ethereum", name: "MetaMask / Ethereum", authType: "address" },
+  { id: "viabtc", name: "ViaBTC", authType: "apiKey", secret: false },
 ];
 
 /** Symboles courants -> id CoinGecko (evite les collisions BTC/ETH/...). */
@@ -73,6 +75,7 @@ const KNOWN_IDS = {
 
 export function createProviders(vault, options = {}) {
   const ethereum = createEthereum(vault);
+  const viabtc = createViaBtc(vault);
   const okxHostname = options.okxHostname ?? process.env.OKX_HOSTNAME ?? "www.okx.com";
   if (!["www.okx.com", "eea.okx.com", "us.okx.com"].includes(okxHostname))
     throw new Error("OKX_HOSTNAME must be www.okx.com, eea.okx.com or us.okx.com.");
@@ -226,6 +229,7 @@ export function createProviders(vault, options = {}) {
     },
 
     async readBalances(account) {
+      if (account.provider === "viabtc") return viabtc.readBalances(account);
       if (account.provider === "ethereum") return ethereum.readBalances(account);
       if (account.provider === "gomining") {
         if (!options.gomining)

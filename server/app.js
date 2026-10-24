@@ -8,6 +8,7 @@ import { passwordsMatch } from "./security.js";
 import { providers } from "./providers.js";
 import { GoMiningError } from "./gomining.js";
 import { isEthereumAddress } from "./ethereum.js";
+import { isViaBtcApiKey } from "./viabtc.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -235,6 +236,18 @@ export function createApp({
       return res.status(400).json({ error: "Nom ou fournisseur invalide." });
     if (store.accounts().length >= 30)
       return res.status(400).json({ error: "Limite de 30 comptes atteinte." });
+    if (provider === "viabtc") {
+      if (typeof apiKey !== "string" || !isViaBtcApiKey(apiKey.trim()))
+        return res.status(400).json({ error: "Cle API ViaBTC absente ou invalide." });
+      const normalized = apiKey.trim();
+      if (store.accounts().some((item) => item.provider === "viabtc" &&
+          vault.decrypt(item.credentials).apiKey === normalized))
+        return res.status(409).json({ error: "Cette cle API ViaBTC est deja utilisee." });
+      const id = randomUUID();
+      store.addAccount({ id, name: name.trim(), provider,
+        credentials: vault.encrypt({ apiKey: normalized }), created_at: new Date().toISOString() });
+      return res.status(201).json({ id });
+    }
     if (provider === "ethereum") {
       if (typeof address !== "string" || !isEthereumAddress(address.trim()))
         return res.status(400).json({ error: "Adresse publique Ethereum invalide (0x suivi de 40 caracteres hexadecimaux)." });
