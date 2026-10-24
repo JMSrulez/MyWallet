@@ -2,7 +2,7 @@ import ccxt from "ccxt";
 import { holdingValue } from "./holdings.js";
 import { createEthereum, isEthereumToken } from "./ethereum.js";
 import { createViaBtc } from "./viabtc.js";
-import { readGateSpot } from "./gate.js";
+import { readGateSpot, readGateQuotes } from "./gate.js";
 
 export const providers = [
   { id: "okx", name: "OKX", passphrase: true },
@@ -107,6 +107,7 @@ export function createProviders(vault, options = {}) {
 
   let coinListPromise = null;
   const priceCache = new Map();
+  const gateQuotes = new Map();
   const CACHE_TTL_MS = 60_000;
 
   async function cgFetch(path) {
@@ -164,9 +165,16 @@ export function createProviders(vault, options = {}) {
 
   return {
     describeAsset: (asset, account) => account.provider === "ethereum"
-      ? ethereum.describeAsset(asset, account) : {},
+      ? ethereum.describeAsset(asset, account)
+      : ["gate", "gateeu"].includes(account.provider) ? { priceProvider: account.provider } : {},
 
     async preparePrices(balances, provider) {
+      if (["gate", "gateeu"].includes(provider)) {
+        const client = new ccxt[provider]({ enableRateLimit: true, timeout: 20000 });
+        try { gateQuotes.set(provider, await readGateQuotes(client)); }
+        finally { await client.close(); }
+        return;
+      }
       if (provider !== "ethereum") return;
       const assets = Object.keys(balances).filter((asset) => isEthereumToken(asset) &&
         balances[asset] > 0 && !(priceCache.get(asset)?.expires > Date.now()));
@@ -294,7 +302,21 @@ export function createProviders(vault, options = {}) {
       }
     },
 
-    async getPrice(asset, provider) {
+    getPrice: async function getPrice(asset, provider) {
+      if (["gate", "gateeu"].includes(provider)) {
+        if (asset === "EUR") return 1;
+        const quotes = gateQuotes.get(provider);
+        if (!quotes) throw new Error("Gate: cours spot non prepares.");
+        // Quote currencies have explicit CoinGecko identities; other tokens
+        // are valued solely through their market on the selected Gate platform.
+        if (["USDT", "USDC", "BTC", "ETH"].includes(asset)) return getPrice(asset);
+        const quote = quotes.get(asset);
+        if (!quote) return null;
+        const price = quote.last * (quote.quote === "EUR" ? 1 : await getPrice(quote.quote));
+        if (!Number.isFinite(price) || price <= 0) throw new Error("Gate: conversion EUR invalide.");
+        console.log(`[prices] ${asset} (${provider}, ${quote.quote}) = ${price} EUR`);
+        return price;
+      }
       if (provider === "ethereum" && isEthereumToken(asset)) {
         if (!(priceCache.get(asset)?.expires > Date.now()))
           throw new Error("Ethereum: prix ERC-20 non prepares.");

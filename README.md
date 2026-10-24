@@ -235,3 +235,9 @@ Dans **Mes comptes**, le bouton avec l'icone de lien renouvelle l'autorisation d
 - Les champs exacts du serveur GoMining ne sont pas publies dans sa documentation. Les tests utilisent des fixtures et le SDK reel contre un serveur simule, pas un compte GoMining reel. La compatibilite du consentement, des schemas et du format de reponse doit etre confirmee avec votre compte ; si le schema differe, le connecteur echoue explicitement et doit etre adapte.
 
 Le client n'utilise aucun modele de langage et n'appelle aucun outil d'ecriture, meme si de futurs outils MCP le permettent. Sources : [documentation officielle GoMining](https://docs.gomining.com/en/product/ai/mcp-server), [OAuth du SDK officiel MCP](https://ts.sdk.modelcontextprotocol.io/v2/clients/oauth.html). Implementation : [server/gomining.js](server/gomining.js), tests : [test/gomining.test.js](test/gomining.test.js).
+
+#### Prix des tokens Gate
+
+Les cours des actifs Gate proviennent des tickers spot de la plateforme choisie (international ou EU), sans recherche du token par symbole sur CoinGecko. Priorite aux paires EUR, puis USDT, USDC, BTC et ETH ; le dernier cours est converti en EUR avec le prix CoinGecko de la devise de cotation (sans supposer USDT = USD). Une seule requete publique `/spot/tickers` par compte et collecte, aucune permission supplementaire.
+
+Un token sans paire exploitable reste visible avec sa quantite et la mention « Non valorise ». Il est exclu du total valorise, explicitement partiel dans l'interface et les exports. Une panne reseau ou une reponse de cours invalide conserve le dernier releve au lieu de produire un total incomplet silencieux. Le dernier cours peut differer du prix de vente effectif, notamment pour les tokens peu liquides.

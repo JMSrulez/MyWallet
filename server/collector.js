@@ -47,7 +47,7 @@ export function createCollector({
                 quantity,
                 price,
                 ...await describeAsset(asset, account),
-                ...(price === null && account.provider === "ethereum" ? { unpriced: true } : {}),
+                ...(price === null && ["ethereum", "gate", "gateeu"].includes(account.provider) ? { unpriced: true } : {}),
               });
             }
             holdings.push(...await readValuations(account, holdings));
