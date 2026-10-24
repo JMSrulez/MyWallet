@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { holdingValue } from "./holdings.js";
 
 export function createStore(filename = ":memory:") {
   const db = new DatabaseSync(filename);
@@ -41,18 +42,8 @@ export function createStore(filename = ":memory:") {
       return db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes;
     },
     recordSnapshot(accountId, capturedAt, holdings) {
-      if (
-        holdings.some(
-          (item) =>
-            !Number.isFinite(item.quantity) ||
-            !Number.isFinite(item.price) ||
-            item.price < 0,
-        )
-      ) {
-        throw new Error("Invalid valuation");
-      }
       const total = holdings.reduce(
-        (sum, item) => sum + item.quantity * item.price,
+        (sum, item) => sum + holdingValue(item),
         0,
       );
       if (!Number.isFinite(total)) throw new Error("Invalid total");

@@ -1,6 +1,9 @@
+import { holdingValue } from "./holdings.js";
+
 export function createCollector({
   store,
   readBalances,
+  readValuations = async () => [],
   getPrice,
   now = () => new Date().toISOString(),
 }) {
@@ -40,10 +43,11 @@ export function createCollector({
                 price: prices.get(asset),
               });
             }
+            holdings.push(...await readValuations(account));
             store.recordSnapshot(account.id, capturedAt, holdings);
             store.recordAttempt(account.id, capturedAt);
             const total = holdings.reduce(
-              (s, h) => s + h.quantity * h.price,
+              (s, h) => s + holdingValue(h),
               0,
             );
             console.log(

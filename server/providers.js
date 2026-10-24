@@ -138,28 +138,71 @@ export function createProviders(vault, options = {}) {
     return candidates[0].id;
   }
 
+  function exchangeClient(account) {
+    const credentials = vault.decrypt(account.credentials);
+    const Exchange = ccxt[account.provider];
+    if (!Exchange) throw new Error(`Fournisseur inconnu: ${account.provider}`);
+    return new Exchange({
+      ...credentials,
+      ...(account.provider === "okx" ? { hostname: okxHostname } : {}),
+      enableRateLimit: true,
+      timeout: 20000,
+      options: { defaultType: "spot" },
+    });
+  }
+
   return {
+    async readValuations(account) {
+      if (account.provider !== "okx") return [];
+      const client = exchangeClient(account);
+      try {
+        // This endpoint already partitions trading, funding and Earn. Only
+        // details.earn is additive to the token balances collected below.
+        const response = await client.privateGetAssetAssetValuation({ ccy: "EUR" });
+        const amount = response?.data?.[0]?.details?.earn;
+        if (
+          response?.code !== "0" ||
+          !Array.isArray(response.data) || response.data.length !== 1 ||
+          typeof amount !== "string" ||
+          !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(amount) ||
+          !Number.isFinite(Number(amount))
+        ) throw new Error("OKX Earn: valorisation EUR absente ou invalide.");
+        const value = Number(amount);
+        console.log(`[okx] ${account.name}: Earn = ${value.toFixed(2)} EUR (valorisation OKX)`);
+        return [{ asset: "OKX_EARN", valuationOnly: true, currency: "EUR", value }];
+      } finally {
+        await client.close();
+      }
+    },
+
     async readBalances(account) {
       if (account.provider === "gomining") {
         if (!options.gomining)
           throw new Error("GoMining: connecteur indisponible.");
         return options.gomining.readBalances(account);
       }
-      const credentials = vault.decrypt(account.credentials);
-      const Exchange = ccxt[account.provider];
-      if (!Exchange)
-        throw new Error(`Fournisseur inconnu: ${account.provider}`);
       console.log(`[${account.provider}] Lecture soldes: ${account.name}`);
-      const client = new Exchange({
-        ...credentials,
-        ...(account.provider === "okx" ? { hostname: okxHostname } : {}),
-        enableRateLimit: true,
-        timeout: 20000,
-        options: { defaultType: "spot" },
-      });
+      const client = exchangeClient(account);
       try {
         const balances = await client.fetchBalance();
         let totals = balances.total;
+        if (account.provider === "okx") {
+          const funding = await client.fetchBalance({ type: "funding" });
+          const combined = new Map();
+          for (const bucket of [totals, funding.total]) {
+            if (!bucket || typeof bucket !== "object" || Array.isArray(bucket))
+              throw new Error("OKX: soldes trading/financement invalides.");
+            for (const [asset, quantity] of Object.entries(bucket)) {
+              if (!Number.isFinite(quantity))
+                throw new Error(`Solde invalide pour ${asset}`);
+              const total = (combined.get(asset) ?? 0) + quantity;
+              if (!Number.isFinite(total))
+                throw new Error(`Solde invalide pour ${asset}`);
+              combined.set(asset, total);
+            }
+          }
+          totals = Object.fromEntries(combined);
+        }
         if (account.provider === "kraken" && totals) {
           const combined = new Map();
           for (const [asset, quantity] of Object.entries(totals)) {

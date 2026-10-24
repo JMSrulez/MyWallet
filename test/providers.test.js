@@ -11,18 +11,29 @@ test("OKX signs balance requests for the configured regional domain", async (t) 
   const requests = [];
   t.mock.method(ccxt.okx.prototype, "fetch", async (url, method, headers) => {
     requests.push({ url, method, headers });
+    if (new URL(url).pathname === "/api/v5/asset/balances")
+      return { code: "0", data: [{ ccy: "EUR", bal: "8", availBal: "6", frozenBal: "2" }] };
+    if (new URL(url).pathname === "/api/v5/asset/asset-valuation")
+      return { code: "0", data: [{ details: { earn: "12" } }] };
     return { code: "0", data: [{ details: [{ ccy: "EUR", cashBal: "42", availBal: "40", frozenBal: "2" }] }] };
   });
   const vault = { decrypt: () => ({ apiKey: "test-key", secret: "test-secret", password: "test-passphrase" }) };
   for (const hostname of ["eea.okx.com", "us.okx.com", "www.okx.com"]) {
     const adapters = createProviders(vault, { okxHostname: hostname });
     const balances = await adapters.readBalances({ provider: "okx", name: "test", credentials: "encrypted" });
-    assert.equal(balances.EUR, 42);
-    const request = requests.at(-1);
-    assert.equal(new URL(request.url).hostname, hostname);
-    assert.equal(new URL(request.url).pathname, "/api/v5/account/balance");
-    assert.equal(request.headers["OK-ACCESS-KEY"], "test-key");
-    assert.ok(request.headers["OK-ACCESS-SIGN"]);
+    assert.equal(balances.EUR, 50);
+    assert.equal((await adapters.readValuations({ provider: "okx", name: "test", credentials: "encrypted" }))[0].value, 12);
+    const batch = requests.slice(-3);
+    assert.deepEqual(batch.map((request) => new URL(request.url).pathname), [
+      "/api/v5/account/balance", "/api/v5/asset/balances", "/api/v5/asset/asset-valuation",
+    ]);
+    for (const request of batch) {
+      assert.equal(new URL(request.url).hostname, hostname);
+      assert.equal(request.method, "GET");
+      assert.equal(request.headers["OK-ACCESS-KEY"], "test-key");
+      assert.ok(request.headers["OK-ACCESS-SIGN"]);
+    }
+    assert.equal(new URL(batch[2].url).searchParams.get("ccy"), "EUR");
   }
 });
 
