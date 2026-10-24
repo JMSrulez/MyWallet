@@ -164,7 +164,9 @@ export function createProviders(vault, options = {}) {
             // Kraken reports separate staking/rewards balances for the same coin.
             // Only documented balance suffixes are folded; tokenized .T assets
             // and unknown suffixes must keep their distinct identity.
-            const symbol = asset.replace(/^([^.]+)\.(?:S|M|B|F|P)$/, "$1");
+            const symbol = asset === "ETH2.S"
+              ? "ETH"
+              : asset.replace(/^([^.]+)\.(?:S|M|B|F|P)$/, "$1");
             const total = (combined.get(symbol) ?? 0) + quantity;
             if (!Number.isFinite(total))
               throw new Error(`Solde invalide pour ${symbol}`);

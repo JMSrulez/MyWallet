@@ -56,6 +56,8 @@ Pour Coinbase, le nom complet de cle peut avoir la forme `organizations/.../apiK
 
 La compatibilite depend des restrictions geographiques, modes de compte, permissions et evolutions d'API. Les connexions privees doivent etre verifiees avec vos propres cles : les tests locaux simulent les fournisseurs. Pour Kraken, les soldes exposes par `BalanceEx` avec les suffixes `.S` (staking), `.M`, `.B`, `.F` (recompenses) et `.P` (parachain) sont additionnes au symbole de base avant valorisation : par exemple, 10 ADA + 20 ADA.S deviennent 30 ADA. Cette valorisation utilise le cours de l'actif sous-jacent ; elle ne signifie pas que les fonds bloques sont disponibles au retrait. Les suffixes inconnus et `.T` (actifs tokenises) ne sont pas assimiles au symbole de base. Aucun appel supplementaire aux APIs staking/Earn n'est effectue et aucun ancien releve n'est modifie. Voir les [suffixes historiques Kraken](https://support.kraken.com/articles/360039879471-what-is-asset-s-and-asset-m-) et la [documentation BalanceEx](https://docs.kraken.com/api/docs/rest-api/get-extended-balance/).
 
+Le symbole historique Kraken `ETH2.S` est valorise et regroupe comme `ETH`, car il represente de l'Ether stake ([explication officielle](https://support.kraken.com/en-it/articles/360052734432)). Cette exception est propre a Kraken et a ce symbole exact.
+
 Les positions staking/Earn absentes des soldes renvoyes, les wallets de financement OKX, les contrats a terme, les positions sur marge et les wallets on-chain **ne sont pas couverts**. Un solde vide expose par une API est enregistre comme zero.
 
 ## Calcul et historique
