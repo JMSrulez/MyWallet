@@ -47,7 +47,7 @@ Creer des cles **en lecture seule**, sans trading, transfert ni retrait. Restrei
 
 | Fournisseur | Identifiants | Perimetre initial |
 | --- | --- | --- |
-| OKX | Cle API, secret et passphrase | Compte trading spot, selon le mode de compte OKX |
+| OKX | Cle API, secret et passphrase | Trading + financement (quantites) + Earn (valorisation globale OKX en EUR) |
 | Kraken | Cle API et secret, permission de consultation des fonds | Soldes spot |
 | Coinbase | Cle API CDP et cle privee **ECDSA** au format PEM, droits de lecture | Soldes accessibles par Coinbase Advanced via CCXT |
 | GoMining | Consentement OAuth via le compte GoMining, sans cle API manuelle | Wallet virtuel via MCP, en lecture seule |
@@ -58,7 +58,23 @@ La compatibilite depend des restrictions geographiques, modes de compte, permiss
 
 Le symbole historique Kraken `ETH2.S` est valorise et regroupe comme `ETH`, car il represente de l'Ether stake ([explication officielle](https://support.kraken.com/en-it/articles/360052734432)). Cette exception est propre a Kraken et a ce symbole exact.
 
-Les positions staking/Earn absentes des soldes renvoyes, les wallets de financement OKX, les contrats a terme, les positions sur marge et les wallets on-chain **ne sont pas couverts**. Un solde vide expose par une API est enregistre comme zero.
+Les positions Kraken staking/Earn absentes des soldes renvoyes, les contrats a terme, les positions sur marge et les wallets on-chain **ne sont pas couverts**. Un solde vide expose par une API est enregistre comme zero.
+
+### OKX : trading, financement et Earn
+
+Les comptes OKX existants collectent automatiquement ces trois perimetres avec les memes identifiants et le meme domaine regional. Utiliser une cle avec les droits **Read** ; aucun droit de trading, transfert, souscription ou retrait n'est requis.
+
+- Trading : `GET /api/v5/account/balance` via CCXT.
+- Financement : `GET /api/v5/asset/balances` via CCXT. Les quantites totales, y compris les fonds geles, sont additionnees au trading par crypto et valorisees via CoinGecko.
+- Earn : `GET /api/v5/asset/asset-valuation?ccy=EUR`. Seul `details.earn` est ajoute. `totalBal`, `details.trading` et `details.funding` ne sont jamais additionnes, car ils recouvrent les soldes deja collectes.
+
+Earn est presente comme une ligne **OKX Earn (valorisation)**, en EUR, sans quantite de jetons. Il ne s'agit pas d'un solde de liquidites en euros : les produits Earn ne sont pas detailles ni supposes disponibles au retrait. La couverture et l'estimation sont celles exposees par OKX pour ce compte et sa region, tous produits Earn confondus dans cette categorie. Les soldes ETH/SOL staking globaux ne sont pas ajoutes separement, car ils peuvent deja inclure trading et financement.
+
+Si une partie de la collecte echoue, ou si la valorisation Earn est absente/malformee, aucun nouveau releve partiel n'est ecrit. Le dernier releve complet est conserve et l'erreur apparait dans Mes comptes. Un montant Earn explicitement egal a `0` est valide ; un champ absent n'est pas interprete comme zero.
+
+Aucune recreation du compte ni modification du `.env` n'est necessaire. Apres fusion et deploiement du code, cliquer sur **Actualiser**. Les anciens releves sont conserves tels quels : le premier total elargi peut creer une hausse due au changement de perimetre, pas a une performance. Les captures SQLite stockent la valorisation Earn avec un type explicite, sans migration du schema SQL. Les tests simulent les reponses OKX ; l'acces reel des endpoints regionaux reste a confirmer avec votre compte.
+
+Reference : [documentation officielle OKX, Funding / Get account asset valuation](https://www.okx.com/docs-v5/en/#funding-account-rest-api-get-account-asset-valuation).
 
 ## Calcul et historique
 

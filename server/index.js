@@ -35,6 +35,7 @@ if (demo) seedDemo(store);
 const collector = createCollector({
   store,
   readBalances: adapters?.readBalances,
+  readValuations: adapters?.readValuations,
   getPrice: adapters?.getPrice,
 });
 const intervalMinutes = Number(process.env.COLLECT_INTERVAL_MINUTES || 60);

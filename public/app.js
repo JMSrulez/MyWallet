@@ -41,6 +41,7 @@ const assetInfo = {
   EUR: { name: "Euro" },
   USD: { name: "Dollar am\u00e9ricain" },
   GOMINING: { name: "GoMining Token" },
+  OKX_EARN: { name: "OKX Earn (valorisation)" },
 };
 const state = {
   portfolio: null,
@@ -71,7 +72,7 @@ const icon = (name, className = "") =>
   `<i data-lucide="${name}" class="${className}"></i>`;
 const accountName = (account) => escapeHtml(account.name);
 const accountScope = (account) =>
-  account.provider === "gomining" ? "Wallet" : "Spot";
+  account.provider === "gomining" ? "Wallet" : account.provider === "okx" ? "Trading + Financement + Earn" : "Spot";
 const providerLogo = (provider) =>
   `<span class="provider-logo provider-${provider}">${icon(provider === "okx" ? "blocks" : provider === "kraken" ? "waves" : provider === "gomining" ? "pickaxe" : "circle-dollar-sign")}</span>`;
 
@@ -408,9 +409,13 @@ function renderAssets(accounts) {
         asset: holding.asset,
         quantity: 0,
         value: 0,
+        valuationOnly: holding.valuationOnly === true,
       };
-      item.quantity += holding.quantity;
-      item.value += holding.quantity * holding.price;
+      if (holding.valuationOnly) item.value += holding.value;
+      else {
+        item.quantity += holding.quantity;
+        item.value += holding.quantity * holding.price;
+      }
       assets.set(holding.asset, item);
     }
   }
@@ -419,7 +424,9 @@ function renderAssets(accounts) {
   );
   const total = items.reduce((sum, item) => sum + item.value, 0);
   $("#asset-count").textContent =
-    `${items.length} actif${items.length > 1 ? "s" : ""}`;
+    items.some((item) => item.valuationOnly)
+      ? `${items.length} postes`
+      : `${items.length} actif${items.length > 1 ? "s" : ""}`;
   $("#assets-empty").hidden = items.length > 0;
   $("#assets-body").innerHTML = items
     .map((item) => {
@@ -428,7 +435,7 @@ function renderAssets(accounts) {
       const image = info.image
         ? `<img class="asset-icon" src="https://coin-images.coingecko.com/coins/images/${info.image}" alt="" loading="lazy" referrerpolicy="no-referrer">`
         : `<span class="asset-fallback">${escapeHtml(item.asset === "EUR" ? "\u20ac" : item.asset.slice(0, 1))}</span>`;
-      return `<tr><td><div class="asset-cell">${image}<div class="asset-label"><strong>${escapeHtml(info.name)}</strong><span>${escapeHtml(item.asset)}</span></div></div></td><td class="money">${quantityFormat.format(item.quantity)} <span class="muted">${escapeHtml(item.asset)}</span></td><td class="money">${euro.format(item.value)}</td><td><div class="asset-allocation"><div class="allocation-bar"><span style="width:${Math.max(0, Math.min(100, share))}%"></span></div><span class="asset-percent">${percent.format(share)} %</span></div></td></tr>`;
+      return `<tr><td><div class="asset-cell">${image}<div class="asset-label"><strong>${escapeHtml(info.name)}</strong><span>${item.valuationOnly ? "Estimation OKX en EUR" : escapeHtml(item.asset)}</span></div></div></td><td class="money">${item.valuationOnly ? "\u2014" : `${quantityFormat.format(item.quantity)} <span class="muted">${escapeHtml(item.asset)}</span>`}</td><td class="money">${euro.format(item.value)}</td><td><div class="asset-allocation"><div class="allocation-bar"><span style="width:${Math.max(0, Math.min(100, share))}%"></span></div><span class="asset-percent">${percent.format(share)} %</span></div></td></tr>`;
     })
     .join("");
   $$(".asset-icon").forEach((image) =>
