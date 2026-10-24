@@ -1,4 +1,5 @@
 import ccxt from "ccxt";
+import { holdingValue } from "./holdings.js";
 
 export const providers = [
   { id: "okx", name: "OKX", passphrase: true },
@@ -152,7 +153,7 @@ export function createProviders(vault, options = {}) {
   }
 
   return {
-    async readValuations(account) {
+    async readValuations(account, holdings = []) {
       if (account.provider !== "okx") return [];
       const client = exchangeClient(account);
       try {
@@ -169,7 +170,27 @@ export function createProviders(vault, options = {}) {
         ) throw new Error("OKX Earn: valorisation EUR absente ou invalide.");
         const value = Number(amount);
         console.log(`[okx] ${account.name}: Earn = ${value.toFixed(2)} EUR (valorisation OKX)`);
-        return [{ asset: "OKX_EARN", valuationOnly: true, currency: "EUR", value }];
+        const valuations = [{ asset: "OKX_EARN", valuationOnly: true, currency: "EUR", value }];
+        if (holdings.some((item) => item.asset === "LYUSDC" && item.quantity > 0)) {
+          // A receipt may also be represented by Earn. The public API does not
+          // identify that overlap. Reconcile against OKX's total instead of
+          // assuming that the receipt is always included (or always excluded).
+          const totalAmount = response.data[0].totalBal;
+          if (
+            typeof totalAmount !== "string" ||
+            !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(totalAmount) ||
+            !Number.isFinite(Number(totalAmount))
+          ) throw new Error("OKX LYUSDC: total EUR requis pour eviter un double comptage.");
+          const reportedTotal = Number(totalAmount);
+          const estimatedTotal = [...holdings, ...valuations].reduce((sum, item) => sum + holdingValue(item), 0);
+          if (!Number.isFinite(estimatedTotal)) throw new Error("OKX LYUSDC: estimation EUR invalide.");
+          const adjustment = reportedTotal - estimatedTotal;
+          if (Math.abs(adjustment) > 1e-8) valuations.push({
+            asset: "OKX_RECONCILIATION", valuationOnly: true, currency: "EUR", value: adjustment,
+          });
+          console.log(`[okx] ${account.name}: total OKX = ${reportedTotal.toFixed(2)} EUR, ajustement = ${adjustment.toFixed(2)} EUR (LYUSDC/Earn)`);
+        }
+        return valuations;
       } finally {
         await client.close();
       }
@@ -233,8 +254,11 @@ export function createProviders(vault, options = {}) {
       }
     },
 
-    async getPrice(asset) {
-      const symbol = String(asset).toUpperCase();
+    async getPrice(asset, provider) {
+      // Explicit OKX receipt mapping only; never infer parity from a suffix.
+      const symbol = provider === "okx" && asset === "LYUSDC"
+        ? "USDC"
+        : String(asset).toUpperCase();
       if (symbol === "EUR") return 1;
 
       const cached = priceCache.get(symbol);

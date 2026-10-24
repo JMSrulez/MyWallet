@@ -33,17 +33,18 @@ export function createCollector({
               if (!Number.isFinite(quantity))
                 throw new Error(`Solde invalide pour ${asset}`);
               if (quantity === 0) continue;
-              if (!prices.has(asset)) {
-                const price = await getPrice(asset);
-                prices.set(asset, price);
+              const priceKey = `${account.provider}:${asset}`;
+              if (!prices.has(priceKey)) {
+                const price = await getPrice(asset, account.provider);
+                prices.set(priceKey, price);
               }
               holdings.push({
                 asset,
                 quantity,
-                price: prices.get(asset),
+                price: prices.get(priceKey),
               });
             }
-            holdings.push(...await readValuations(account));
+            holdings.push(...await readValuations(account, holdings));
             store.recordSnapshot(account.id, capturedAt, holdings);
             store.recordAttempt(account.id, capturedAt);
             const total = holdings.reduce(

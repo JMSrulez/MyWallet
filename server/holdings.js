@@ -2,10 +2,10 @@
 export function holdingValue(item) {
   if (item.valuationOnly === true) {
     if (
-      item.asset !== "OKX_EARN" ||
+      !["OKX_EARN", "OKX_RECONCILIATION"].includes(item.asset) ||
       item.currency !== "EUR" ||
       !Number.isFinite(item.value) ||
-      item.value < 0 ||
+      (item.asset !== "OKX_RECONCILIATION" && item.value < 0) ||
       item.quantity !== undefined ||
       item.price !== undefined
     ) throw new Error("Invalid valuation");
