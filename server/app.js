@@ -7,6 +7,7 @@ import { buildPortfolio } from "./store.js";
 import { passwordsMatch } from "./security.js";
 import { providers } from "./providers.js";
 import { GoMiningError } from "./gomining.js";
+import { isEthereumAddress } from "./ethereum.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -125,7 +126,7 @@ export function createApp({
     const portfolio = buildPortfolio(store);
     const escape = (value) => `"${String(value).replaceAll('"', '""')}"`;
     const rows = [
-      ["date", "account_id", "provider", "value_eur"],
+      ["date", "account_id", "provider", "value_eur", "valuation_status"],
       ...store
         .snapshots()
         .map((snapshot) => [
@@ -135,6 +136,7 @@ export function createApp({
             (account) => account.id === snapshot.account_id,
           )?.provider,
           snapshot.total.toFixed(2),
+          snapshot.holdings.some((item) => item.unpriced) ? "partial" : "complete",
         ]),
     ];
     res
@@ -217,7 +219,7 @@ export function createApp({
       return res
         .status(409)
         .json({ error: "Une collecte est en cours. Reessayez ensuite." });
-    const { name, provider, apiKey, secret, passphrase } = req.body ?? {};
+    const { name, provider, apiKey, secret, passphrase, address } = req.body ?? {};
     if (provider === "gomining")
       return res
         .status(400)
@@ -231,6 +233,20 @@ export function createApp({
       !providers.some((item) => item.id === provider)
     )
       return res.status(400).json({ error: "Nom ou fournisseur invalide." });
+    if (store.accounts().length >= 30)
+      return res.status(400).json({ error: "Limite de 30 comptes atteinte." });
+    if (provider === "ethereum") {
+      if (typeof address !== "string" || !isEthereumAddress(address.trim()))
+        return res.status(400).json({ error: "Adresse publique Ethereum invalide (0x suivi de 40 caracteres hexadecimaux)." });
+      const normalized = address.trim().toLowerCase();
+      if (store.accounts().some((item) => item.provider === "ethereum" &&
+          vault.decrypt(item.credentials).address?.toLowerCase() === normalized))
+        return res.status(409).json({ error: "Cette adresse Ethereum est deja suivie." });
+      const id = randomUUID();
+      store.addAccount({ id, name: name.trim(), provider,
+        credentials: vault.encrypt({ address: normalized }), created_at: new Date().toISOString() });
+      return res.status(201).json({ id });
+    }
     if (
       typeof apiKey !== "string" ||
       !apiKey.trim() ||
@@ -246,8 +262,6 @@ export function createApp({
       return res
         .status(400)
         .json({ error: "Identifiants API incomplets ou invalides." });
-    if (store.accounts().length >= 30)
-      return res.status(400).json({ error: "Limite de 30 comptes atteinte." });
     const account = {
       id: randomUUID(),
       name: name.trim(),
