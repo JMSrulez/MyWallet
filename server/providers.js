@@ -2,6 +2,7 @@ import ccxt from "ccxt";
 import { holdingValue } from "./holdings.js";
 import { createEthereum, isEthereumToken } from "./ethereum.js";
 import { createViaBtc } from "./viabtc.js";
+import { readGateSpot } from "./gate.js";
 
 export const providers = [
   { id: "okx", name: "OKX", passphrase: true },
@@ -10,6 +11,8 @@ export const providers = [
   { id: "gomining", name: "GoMining", authType: "oauth", scope: "wallet" },
   { id: "ethereum", name: "MetaMask / Ethereum", authType: "address" },
   { id: "viabtc", name: "ViaBTC", authType: "apiKey", secret: false },
+  { id: "gate", name: "Gate.io (international)", passphrase: false },
+  { id: "gateeu", name: "Gate EU (Europe)", passphrase: false },
 ];
 
 /** Symboles courants -> id CoinGecko (evite les collisions BTC/ETH/...). */
@@ -71,6 +74,7 @@ const KNOWN_IDS = {
   WIF: "dogwifcoin",
   BNB: "binancecoin",
   GOMINING: "gmt-token",
+  GT: "gatechain-token",
 };
 
 export function createProviders(vault, options = {}) {
@@ -239,6 +243,8 @@ export function createProviders(vault, options = {}) {
       console.log(`[${account.provider}] Lecture soldes: ${account.name}`);
       const client = exchangeClient(account);
       try {
+        if (account.provider === "gate" || account.provider === "gateeu")
+          return await readGateSpot(client);
         const balances = await client.fetchBalance();
         let totals = balances.total;
         if (account.provider === "okx") {

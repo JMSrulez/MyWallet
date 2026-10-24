@@ -53,6 +53,7 @@ Creer des cles **en lecture seule**, sans trading, transfert ni retrait. Restrei
 | GoMining | Consentement OAuth via le compte GoMining, sans cle API manuelle | Wallet virtuel via MCP, en lecture seule |
 | MetaMask / Ethereum | Adresse publique `0x` suivie de 40 caracteres hexadecimaux | Ethereum principal : ETH et jetons ERC-20 indexes par Blockscout |
 | ViaBTC | Cle API du compte ou sous-compte, sans secret pour cet appel | Soldes du pool exposes par l'API de compte |
+| Gate.io (international) / Gate EU (Europe) | Cle API v4 et secret, permission Spot en lecture seule | Compte spot : fonds disponibles + bloques |
 
 Pour Coinbase, le nom complet de cle peut avoir la forme `organizations/.../apiKeys/...`. Conserver les lignes PEM ; les retours a la ligne echappes `\n` sont aussi acceptes. Utiliser une cle ECDSA compatible CCXT, pas une cle Ed25519. Si necessaire, creer une cle par portefeuille/sous-compte.
 
@@ -132,7 +133,24 @@ Les erreurs de cle (`12001`) et d'IP (`12004`) sont expliquees dans Mes comptes.
 
 References : [configuration des cles ViaBTC](https://support.viabtc.com/hc/en-us/articles/7207443487887-What-is-API-and-How-to-Set-Up), [API de compte](https://github.com/viabtc/viapool_api/wiki/acquire_account_info), [authentification](https://github.com/viabtc/viapool_api/wiki/api_authentication), [codes d'erreur](https://github.com/viabtc/viapool_api/wiki/error_code). Les tests simulent les reponses authentifiees ; verifier les montants avec le compte ViaBTC reel apres deploiement.
 
-### Variables d'environnement
+### Ajouter Gate.io ou Gate EU
+
+Creer une **cle API v4** et son **secret** sur la plateforme ou votre compte est ouvert, avec la permission **Spot / Read-only**. Aucun droit de trading, retrait ou transfert n'est requis. Si une liste blanche IP est configuree, autoriser l'IP publique de sortie du serveur MyWallet. Gate indique que les modifications de permissions peuvent prendre jusqu'a cinq minutes pour s'appliquer.
+
+Dans **Ajouter un compte**, choisir la plateforme correspondant a la creation de la cle :
+
+- **Gate.io (international)** : API `https://api.gateio.ws/api/v4`.
+- **Gate EU (Europe)** : API `https://api.gateeu.com/api/v4`.
+
+Ce choix depend du compte, pas de l'emplacement du serveur. Saisir un nom, la cle et le secret dans MyWallet ; aucune passphrase ni modification du `.env` n'est necessaire. Les identifiants sont chiffres comme ceux des autres exchanges et ne sont pas renvoyes au navigateur.
+
+Le connecteur utilise la signature APIv4 de CCXT pour un seul appel prive, **GET /spot/accounts**. Il additionne `available` et `locked` pour chaque monnaie, puis valorise via CoinGecko. Le GT est associe explicitement a l'identifiant CoinGecko `gatechain-token`. Il n'effectue ni decouverte du statut de compte unifie ni appel a d'autres groupes de permissions. Cette version ne couvre pas Earn, marge, futures, contrats ou soldes du compte unifie distincts du spot.
+
+Les erreurs de cle, signature, liste blanche IP et horodatage sont traduites en messages explicites sans recopier les messages bruts du fournisseur. Une liste de soldes absente ou malformee, des monnaies dupliquees, des quantites invalides, une erreur reseau ou un cours manquant refusent le nouveau releve et conservent le precedent. Seul un tableau de soldes explicitement vide est accepte comme zero. Les captures existantes ne sont pas modifiees.
+
+References : [API Gate internationale et permissions](https://www.gate.com/docs/developers/apiv4/en/), [endpoint spot](https://www.gate.com/docs/developers/apiv4/en/spot/), [API Gate EU](https://www.gate.com/en-eu/docs/developers/apiv4/), [identifiant GT CoinGecko](https://www.coingecko.com/en/coins/gatetoken). Les tests utilisent le vrai signataire CCXT avec des reponses simulees ; verifier les soldes avec le compte reel apres deploiement.
+
+### Variables
 
 | Variable | Description |
 | --- | --- |
