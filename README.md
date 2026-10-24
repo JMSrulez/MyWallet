@@ -52,6 +52,7 @@ Creer des cles **en lecture seule**, sans trading, transfert ni retrait. Restrei
 | Coinbase | Cle API CDP et cle privee **ECDSA** au format PEM, droits de lecture | Soldes accessibles par Coinbase Advanced via CCXT |
 | GoMining | Consentement OAuth via le compte GoMining, sans cle API manuelle | Wallet virtuel via MCP, en lecture seule |
 | MetaMask / Ethereum | Adresse publique `0x` suivie de 40 caracteres hexadecimaux | Ethereum principal : ETH et jetons ERC-20 indexes par Blockscout |
+| ViaBTC | Cle API du compte ou sous-compte, sans secret pour cet appel | Soldes du pool exposes par l'API de compte |
 
 Pour Coinbase, le nom complet de cle peut avoir la forme `organizations/.../apiKeys/...`. Conserver les lignes PEM ; les retours a la ligne echappes `\n` sont aussi acceptes. Utiliser une cle ECDSA compatible CCXT, pas une cle Ed25519. Si necessaire, creer une cle par portefeuille/sous-compte.
 
@@ -92,7 +93,7 @@ Le total d'un compte contenant LYUSDC suit donc la valorisation globale fournie 
 - Soldes `total` remontes par CCXT, incluant les fonds libres et bloques exposes par l'API.
 - Quantites et prix en EUR enregistres a chaque collecte. Aucun historique retroactif reel n'est invente.
 - Prix en EUR via **CoinGecko** (API simple/price). Cle optionnelle `COINGECKO_API_KEY` (type `demo` ou `pro`). Sans cle, l'API publique est utilisee avec des limites plus strictes. Cache local d'environ 60 secondes.
-- Pour les exchanges, si un actif non nul n'a pas de prix disponible, **tout le releve du compte echoue** : aucune valorisation partielle n'est enregistree. Pour Ethereum, les jetons sans cotation sont au contraire listes comme **non valorises** et le total est explicitement marque **partiel** (voir ci-dessous).
+- Pour les exchanges et ViaBTC, si un actif non nul n'a pas de prix disponible, **tout le releve du compte echoue** : aucune valorisation partielle n'est enregistree. Pour Ethereum, les jetons sans cotation sont au contraire listes comme **non valorises** et le total est explicitement marque **partiel** (voir ci-dessous).
 - En cas d'echec d'un compte, son dernier releve est conserve et signale comme ancien. Les autres comptes continuent a etre collectes.
 - Le graphique global additionne les derniers releves connus a chaque instant ; ce ne sont pas necessairement des releves simultanes. Un nouveau compte commence a compter a son premier releve.
 - Les variations representent une variation de solde, **pas une performance d'investissement** : depots, retraits et transferts les affectent.
@@ -117,7 +118,21 @@ Les quantites et valorisations sont stockees en nombres JavaScript pour l'affich
 
 References : [API Blockscout](https://github.com/blockscout/blockscout-api-v2-swagger/blob/main/swagger.yaml), [prix CoinGecko par contrat](https://docs.coingecko.com/demo/reference/simple-token-price).
 
-### Variables
+### Ajouter ViaBTC
+
+Dans ViaBTC, ouvrir **Account Management > API Management**, creer ou recuperer la **cle API du compte ou sous-compte souhaite**, puis configurer la liste blanche avec l'**IP publique de sortie du serveur MyWallet**. Ce n'est ni l'IP locale `192.168...`, ni necessairement l'IP du domaine Cloudflare utilise pour acceder a MyWallet. La configuration de liste blanche est requise par la documentation ViaBTC.
+
+Apres fusion et deploiement, choisir **Ajouter un compte > ViaBTC**, saisir un nom puis la cle API. Le secret API n'est ni demande ni conserve : l'appel documente `GET /res/openapi/v1/account` ne necessite pas de signature. La cle est chiffree dans SQLite comme les autres identifiants et n'est jamais renvoyee au navigateur. Aucun changement de `.env` n'est necessaire.
+
+Le connecteur lit uniquement la liste `data.balance` (`coin`, `amount`) du compte associe a la cle, sur `https://www.viabtc.com`. Les soldes de toutes les monnaies renvoyees sont valorises via le moteur CoinGecko existant. Les profits cumules, estimations de revenus, historiques de paiements, adresses de retrait, statistiques de hashrate et workers ne sont pas ajoutes au patrimoine. L'objectif est de suivre les soldes restants exposes par le pool, sans additionner de nouveau les revenus deja verses dans un wallet ou exchange suivi ailleurs. Les captures des differents fournisseurs restent prises a des instants differents.
+
+Les sous-comptes ne sont pas enumeres ni additionnes automatiquement ; ajouter un compte MyWallet avec sa propre cle pour chaque sous-compte a suivre. Une meme cle ne peut pas etre ajoutee deux fois. Ne pas ajouter deux cles distinctes du meme compte comme s'il s'agissait de deux patrimoines independants.
+
+Les erreurs de cle (`12001`) et d'IP (`12004`) sont expliquees dans Mes comptes. Une reponse absente, malformee, un refus API ou une erreur de prix conserve le dernier releve complet ; un tableau de soldes explicitement vide est accepte comme un solde nul. Les messages bruts du fournisseur, qui pourraient contenir des donnees de compte, ne sont pas enregistres dans les erreurs. Les redirections HTTP sont refusees afin de ne pas transmettre la cle a un autre domaine. Aucun appel de retrait, transfert ou modification n'est effectue.
+
+References : [configuration des cles ViaBTC](https://support.viabtc.com/hc/en-us/articles/7207443487887-What-is-API-and-How-to-Set-Up), [API de compte](https://github.com/viabtc/viapool_api/wiki/acquire_account_info), [authentification](https://github.com/viabtc/viapool_api/wiki/api_authentication), [codes d'erreur](https://github.com/viabtc/viapool_api/wiki/error_code). Les tests simulent les reponses authentifiees ; verifier les montants avec le compte ViaBTC reel apres deploiement.
+
+### Variables d'environnement
 
 | Variable | Description |
 | --- | --- |

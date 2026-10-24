@@ -24,6 +24,7 @@ const providerNames = {
   coinbase: "Coinbase",
   gomining: "GoMining",
   ethereum: "MetaMask / Ethereum",
+  viabtc: "ViaBTC",
 };
 const colors = [
   "#248b70",
@@ -75,9 +76,9 @@ const icon = (name, className = "") =>
   `<i data-lucide="${name}" class="${className}"></i>`;
 const accountName = (account) => escapeHtml(account.name);
 const accountScope = (account) =>
-  account.provider === "gomining" ? "Wallet" : account.provider === "ethereum" ? "Ethereum · ETH + ERC-20" : account.provider === "okx" ? "Trading + Financement + Earn" : "Spot";
+  account.provider === "gomining" ? "Wallet" : account.provider === "viabtc" ? "Pool · soldes détenus" : account.provider === "ethereum" ? "Ethereum · ETH + ERC-20" : account.provider === "okx" ? "Trading + Financement + Earn" : "Spot";
 const providerLogo = (provider) =>
-  `<span class="provider-logo provider-${provider}">${icon(provider === "okx" ? "blocks" : provider === "kraken" ? "waves" : provider === "gomining" ? "pickaxe" : provider === "ethereum" ? "wallet" : "circle-dollar-sign")}</span>`;
+  `<span class="provider-logo provider-${provider}">${icon(provider === "okx" ? "blocks" : provider === "kraken" ? "waves" : (provider === "gomining" || provider === "viabtc") ? "pickaxe" : provider === "ethereum" ? "wallet" : "circle-dollar-sign")}</span>`;
 
 async function api(route, options = {}) {
   const response = await fetch(`/api${route}`, {
@@ -580,6 +581,7 @@ function updateProvider() {
   const provider = $("#provider").value;
   const oauth = provider === "gomining";
   const wallet = provider === "ethereum";
+  const apiKeyOnly = provider === "viabtc";
   $("#wallet-address-field").hidden = !wallet;
   $("#wallet-address").disabled = !wallet;
   $("#wallet-address").required = wallet;
@@ -587,7 +589,13 @@ function updateProvider() {
   $$("#api-credentials input, #api-credentials textarea").forEach((field) => {
     field.disabled = oauth || wallet;
   });
-  $("#connection-security").textContent = wallet
+  $("#api-secret").hidden = apiKeyOnly;
+  $("#secret-label").hidden = apiKeyOnly;
+  $("#api-secret").disabled = oauth || wallet || apiKeyOnly;
+  $("#api-secret").required = !apiKeyOnly;
+  $("#connection-security").textContent = apiKeyOnly
+    ? "Clé API ViaBTC uniquement. Autorisez l’IP publique de sortie du serveur dans ViaBTC."
+    : wallet
     ? "Adresse publique uniquement. Lecture via Blockscout ; aucune signature ou connexion MetaMask."
     : oauth
     ? "Autorisation GoMining en lecture seule."
