@@ -58,3 +58,30 @@ export async function readGateSpot(client) {
     throw failure("Lecture du solde spot impossible. Verifiez la connexion API.");
   }
 }
+
+// Gate's own market identity avoids CoinGecko symbol collisions for long-tail tokens.
+export async function readGateQuotes(client) {
+  let rows;
+  try { rows = await client.publicSpotGetTickers(); }
+  catch { throw failure("Cours spot indisponibles. Reessayez plus tard."); }
+  if (!Array.isArray(rows)) throw failure("Reponse de cours spot invalide.");
+  const pairs = new Map();
+  const quotes = ["EUR", "USDT", "USDC", "BTC", "ETH"];
+  for (const row of rows) {
+    if (typeof row?.currency_pair !== "string") throw failure("Paire spot invalide.");
+    const parts = row.currency_pair.split("_");
+    if (parts.length !== 2 || !quotes.includes(parts[1])) continue;
+    if (pairs.has(row.currency_pair)) throw failure("Cours spot duplique.");
+    // Empty/zero last prices mean no usable quotation, not a worthless token.
+    const last = row.last === "" ? 0 : amount(row.last);
+    pairs.set(row.currency_pair, { asset: client.safeCurrencyCode(parts[0]), quote: parts[1], last });
+  }
+  const result = new Map();
+  for (const quote of quotes) {
+    for (const item of pairs.values()) {
+      if (item.quote === quote && item.last > 0 && !result.has(item.asset))
+        result.set(item.asset, item);
+    }
+  }
+  return result;
+}

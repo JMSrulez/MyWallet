@@ -1,6 +1,10 @@
 // Provider valuations are not token quantities or EUR cash balances.
 export function holdingValue(item) {
   if (item.unpriced === true) {
+    if (["gate", "gateeu"].includes(item.priceProvider) &&
+        /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/.test(item.asset) &&
+        item.price === null && !item.valuationOnly &&
+        Number.isFinite(item.quantity) && item.quantity > 0) return 0;
     if (!/^ERC20:0x[a-f0-9]{40}$/.test(item.asset) ||
         item.network !== "ethereum" || item.asset !== `ERC20:${item.contract}` ||
         item.price !== null || item.valuationOnly ||
