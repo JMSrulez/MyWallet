@@ -76,6 +76,16 @@ Aucune recreation du compte ni modification du `.env` n'est necessaire. Apres fu
 
 Reference : [documentation officielle OKX, Funding / Get account asset valuation](https://www.okx.com/docs-v5/en/#funding-account-rest-api-get-account-asset-valuation).
 
+#### LYUSDC : estimation et rapprochement avec OKX
+
+LYUSDC est le recu OKX Europe representant des USDC places en DeFi Earn, recompenses reinvesties incluses. OKX indique un remboursement nominal de 1 LYUSDC pour 1 USDC, soumis aux conditions du protocole ([annonce officielle](https://www.okx.com/en-eu/help/lyusdc-defi-earn-eea)). Ce n'est pas une cotation de marche ni une garantie de remboursement.
+
+MyWallet conserve le nom et la quantite **LYUSDC**, avec une estimation utilisant le cours **USDC/EUR** de CoinGecko. Cette correspondance ne s'applique qu'au symbole exact `LYUSDC` chez OKX : aucune regle generique n'est appliquee aux noms terminant par USDC, et aucun cours fixe de 1 USD n'est utilise.
+
+Quand des LYUSDC sont presents, le champ Earn ne permet pas d'identifier si le recu est deja represente dans son montant. MyWallet ne suppose donc ni inclusion ni exclusion. Il utilise `totalBal` en EUR renvoye par OKX comme reference du total du compte et affiche, si necessaire, une ligne signee **Ajustement au total OKX**. Cette ligne vaut `total OKX - (estimation des cryptos trading/financement + valorisation Earn)`. Ainsi le recu ne gonfle pas le total par addition aveugle avec Earn. L'ajustement peut aussi refleter des differences de cours, d'heure de capture ou de perimetre avec la valorisation globale OKX ; il n'est pas une mesure exacte du chevauchement Earn/LYUSDC.
+
+Le total d'un compte contenant LYUSDC suit donc la valorisation globale fournie par OKX, plutot qu'un total exclusivement CoinGecko. Comparer avec le total global de l'app OKX affiche en euros au meme moment, pas uniquement avec le sous-total Earn. La ligne d'ajustement n'a ni quantite de jetons ni pourcentage de repartition. Si `totalBal` manque ou est invalide, le nouveau releve est refuse et le dernier complet est conserve. Les comptes sans LYUSDC gardent le calcul trading + financement + Earn precedent. Aucune donnee historique n'est reecrite.
+
 ## Calcul et historique
 
 - Soldes `total` remontes par CCXT, incluant les fonds libres et bloques exposes par l'API.

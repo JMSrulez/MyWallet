@@ -42,6 +42,8 @@ const assetInfo = {
   USD: { name: "Dollar am\u00e9ricain" },
   GOMINING: { name: "GoMining Token" },
   OKX_EARN: { name: "OKX Earn (valorisation)" },
+  LYUSDC: { name: "OKX Liquid Yield USDC" },
+  OKX_RECONCILIATION: { name: "Ajustement au total OKX" },
 };
 const state = {
   portfolio: null,
@@ -435,7 +437,16 @@ function renderAssets(accounts) {
       const image = info.image
         ? `<img class="asset-icon" src="https://coin-images.coingecko.com/coins/images/${info.image}" alt="" loading="lazy" referrerpolicy="no-referrer">`
         : `<span class="asset-fallback">${escapeHtml(item.asset === "EUR" ? "\u20ac" : item.asset.slice(0, 1))}</span>`;
-      return `<tr><td><div class="asset-cell">${image}<div class="asset-label"><strong>${escapeHtml(info.name)}</strong><span>${item.valuationOnly ? "Estimation OKX en EUR" : escapeHtml(item.asset)}</span></div></div></td><td class="money">${item.valuationOnly ? "\u2014" : `${quantityFormat.format(item.quantity)} <span class="muted">${escapeHtml(item.asset)}</span>`}</td><td class="money">${euro.format(item.value)}</td><td><div class="asset-allocation"><div class="allocation-bar"><span style="width:${Math.max(0, Math.min(100, share))}%"></span></div><span class="asset-percent">${percent.format(share)} %</span></div></td></tr>`;
+      const reconciliation = item.asset === "OKX_RECONCILIATION";
+      const detail = reconciliation
+        ? "Rapprochement avec le total OKX"
+        : item.asset === "LYUSDC"
+          ? "LYUSDC · estimation 1:1 USDC"
+          : item.valuationOnly ? "Estimation OKX en EUR" : item.asset;
+      const allocation = reconciliation
+        ? "\u2014"
+        : `<div class="asset-allocation"><div class="allocation-bar"><span style="width:${Math.max(0, Math.min(100, share))}%"></span></div><span class="asset-percent">${percent.format(share)} %</span></div>`;
+      return `<tr><td><div class="asset-cell">${image}<div class="asset-label"><strong>${escapeHtml(info.name)}</strong><span>${escapeHtml(detail)}</span></div></div></td><td class="money">${item.valuationOnly ? "\u2014" : `${quantityFormat.format(item.quantity)} <span class="muted">${escapeHtml(item.asset)}</span>`}</td><td class="money">${euro.format(item.value)}</td><td>${allocation}</td></tr>`;
     })
     .join("");
   $$(".asset-icon").forEach((image) =>
