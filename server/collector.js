@@ -3,6 +3,8 @@ import { holdingValue } from "./holdings.js";
 export function createCollector({
   store,
   readBalances,
+  preparePrices = async () => {},
+  describeAsset = () => ({}),
   readValuations = async () => [],
   getPrice,
   now = () => new Date().toISOString(),
@@ -28,6 +30,7 @@ export function createCollector({
         for (const account of store.accounts()) {
           try {
             const balances = await readBalances(account);
+            await preparePrices(balances, account.provider);
             const holdings = [];
             for (const [asset, quantity] of Object.entries(balances)) {
               if (!Number.isFinite(quantity))
@@ -38,10 +41,13 @@ export function createCollector({
                 const price = await getPrice(asset, account.provider);
                 prices.set(priceKey, price);
               }
+              const price = prices.get(priceKey);
               holdings.push({
                 asset,
                 quantity,
-                price: prices.get(priceKey),
+                price,
+                ...await describeAsset(asset, account),
+                ...(price === null && account.provider === "ethereum" ? { unpriced: true } : {}),
               });
             }
             holdings.push(...await readValuations(account, holdings));

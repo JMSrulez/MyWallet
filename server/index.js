@@ -35,6 +35,8 @@ if (demo) seedDemo(store);
 const collector = createCollector({
   store,
   readBalances: adapters?.readBalances,
+  preparePrices: adapters?.preparePrices,
+  describeAsset: adapters?.describeAsset,
   readValuations: adapters?.readValuations,
   getPrice: adapters?.getPrice,
 });

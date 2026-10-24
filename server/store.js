@@ -78,17 +78,21 @@ export function buildPortfolio(store) {
       accounts: Object.fromEntries(
         [...latest].map(([id, item]) => [id, item.total]),
       ),
+      partial: [...latest.values()].some((item) => item.holdings.some((holding) => holding.unpriced === true)),
     });
   }
   const safeAccounts = accounts.map(({ credentials, ...account }) => ({
     ...account,
-    snapshot: latest.get(account.id) ?? null,
+    snapshot: latest.has(account.id) ? { ...latest.get(account.id),
+      partial: latest.get(account.id).holdings.some((item) => item.unpriced === true) } : null,
     history: snapshots
       .filter((item) => item.account_id === account.id)
-      .map((item) => ({ time: item.captured_at, total: item.total })),
+      .map((item) => ({ time: item.captured_at, total: item.total,
+        partial: item.holdings.some((holding) => holding.unpriced === true) })),
   }));
   return {
     currency: "EUR",
+    partial: safeAccounts.some((account) => account.snapshot?.partial),
     total: safeAccounts.reduce(
       (sum, account) => sum + (account.snapshot?.total ?? 0),
       0,

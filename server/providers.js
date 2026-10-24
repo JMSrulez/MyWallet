@@ -1,11 +1,13 @@
 import ccxt from "ccxt";
 import { holdingValue } from "./holdings.js";
+import { createEthereum, isEthereumToken } from "./ethereum.js";
 
 export const providers = [
   { id: "okx", name: "OKX", passphrase: true },
   { id: "kraken", name: "Kraken", passphrase: false },
   { id: "coinbase", name: "Coinbase", passphrase: false },
   { id: "gomining", name: "GoMining", authType: "oauth", scope: "wallet" },
+  { id: "ethereum", name: "MetaMask / Ethereum", authType: "address" },
 ];
 
 /** Symboles courants -> id CoinGecko (evite les collisions BTC/ETH/...). */
@@ -70,6 +72,7 @@ const KNOWN_IDS = {
 };
 
 export function createProviders(vault, options = {}) {
+  const ethereum = createEthereum(vault);
   const okxHostname = options.okxHostname ?? process.env.OKX_HOSTNAME ?? "www.okx.com";
   if (!["www.okx.com", "eea.okx.com", "us.okx.com"].includes(okxHostname))
     throw new Error("OKX_HOSTNAME must be www.okx.com, eea.okx.com or us.okx.com.");
@@ -153,7 +156,33 @@ export function createProviders(vault, options = {}) {
   }
 
   return {
+    describeAsset: (asset, account) => account.provider === "ethereum"
+      ? ethereum.describeAsset(asset, account) : {},
+
+    async preparePrices(balances, provider) {
+      if (provider !== "ethereum") return;
+      const assets = Object.keys(balances).filter((asset) => isEthereumToken(asset) &&
+        balances[asset] > 0 && !(priceCache.get(asset)?.expires > Date.now()));
+      // Chunk below CoinGecko's documented 515-address maximum to keep URLs short.
+      for (let offset = 0; offset < assets.length; offset += 50) {
+        const batch = assets.slice(offset, offset + 50);
+        const addresses = batch.map((asset) => asset.slice(6));
+        const data = await cgFetch(`/simple/token_price/ethereum?contract_addresses=${addresses.join(",")}&vs_currencies=eur`);
+        if (!data || typeof data !== "object" || Array.isArray(data) || data.error || data.status?.error_code)
+          throw new Error("Ethereum: reponse de prix CoinGecko invalide.");
+        const indexed = new Map(Object.entries(data).map(([key, value]) => [key.toLowerCase(), value]));
+        for (const asset of batch) {
+          const price = indexed.get(asset.slice(6))?.eur;
+          if (price !== undefined && price !== null && (!Number.isFinite(price) || price < 0))
+            throw new Error("Ethereum: prix ERC-20 invalide.");
+          priceCache.set(asset, { price: Number.isFinite(price) && price > 0 ? price : null,
+            expires: Date.now() + CACHE_TTL_MS });
+        }
+      }
+    },
+
     async readValuations(account, holdings = []) {
+      if (account.provider === "ethereum") return ethereum.extraHoldings(account);
       if (account.provider !== "okx") return [];
       const client = exchangeClient(account);
       try {
@@ -197,6 +226,7 @@ export function createProviders(vault, options = {}) {
     },
 
     async readBalances(account) {
+      if (account.provider === "ethereum") return ethereum.readBalances(account);
       if (account.provider === "gomining") {
         if (!options.gomining)
           throw new Error("GoMining: connecteur indisponible.");
@@ -255,6 +285,11 @@ export function createProviders(vault, options = {}) {
     },
 
     async getPrice(asset, provider) {
+      if (provider === "ethereum" && isEthereumToken(asset)) {
+        if (!(priceCache.get(asset)?.expires > Date.now()))
+          throw new Error("Ethereum: prix ERC-20 non prepares.");
+        return priceCache.get(asset).price;
+      }
       // Explicit OKX receipt mapping only; never infer parity from a suffix.
       const symbol = provider === "okx" && asset === "LYUSDC"
         ? "USDC"

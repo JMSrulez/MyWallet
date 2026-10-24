@@ -1,5 +1,14 @@
 // Provider valuations are not token quantities or EUR cash balances.
 export function holdingValue(item) {
+  if (item.unpriced === true) {
+    if (!/^ERC20:0x[a-f0-9]{40}$/.test(item.asset) ||
+        item.network !== "ethereum" || item.asset !== `ERC20:${item.contract}` ||
+        item.price !== null || item.valuationOnly ||
+        !(Number.isFinite(item.quantity) && item.quantity > 0 ||
+          item.quantity === null && item.decimals === null && /^\d{1,78}$/.test(item.rawQuantity)))
+      throw new Error("Invalid unpriced holding");
+    return 0; // Excluded from the priced subtotal; explicitly flagged by the API/UI.
+  }
   if (item.valuationOnly === true) {
     if (
       !["OKX_EARN", "OKX_RECONCILIATION"].includes(item.asset) ||
