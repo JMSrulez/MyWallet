@@ -418,6 +418,7 @@
           <option value="okx">OKX</option>
           <option value="kraken">Kraken</option>
           <option value="coinbase">Coinbase</option>
+          <option value="ethereum">MetaMask / Ethereum</option>
           <option value="gomining">GoMining</option></select
         ><label for="account-name">Nom du compte</label
         ><input
@@ -428,6 +429,12 @@
           placeholder="Mon compte OKX"
           autocomplete="off"
         />
+        <div id="wallet-address-field" hidden>
+          <label for="wallet-address">Adresse publique Ethereum</label>
+          <input id="wallet-address" name="address" placeholder="0x..." maxlength="42"
+            pattern="0x[a-fA-F0-9]{40}" autocomplete="off" spellcheck="false" disabled>
+          <p class="muted">R&eacute;seau Ethereum principal : ETH et jetons ERC-20. Aucun secret ni signature n&eacute;cessaire.</p>
+        </div>
         <div id="api-credentials">
           <label for="api-key">Cl&eacute; API</label
           ><input

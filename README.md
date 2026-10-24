@@ -51,6 +51,7 @@ Creer des cles **en lecture seule**, sans trading, transfert ni retrait. Restrei
 | Kraken | Cle API et secret, permission de consultation des fonds | Soldes spot |
 | Coinbase | Cle API CDP et cle privee **ECDSA** au format PEM, droits de lecture | Soldes accessibles par Coinbase Advanced via CCXT |
 | GoMining | Consentement OAuth via le compte GoMining, sans cle API manuelle | Wallet virtuel via MCP, en lecture seule |
+| MetaMask / Ethereum | Adresse publique `0x` suivie de 40 caracteres hexadecimaux | Ethereum principal : ETH et jetons ERC-20 indexes par Blockscout |
 
 Pour Coinbase, le nom complet de cle peut avoir la forme `organizations/.../apiKeys/...`. Conserver les lignes PEM ; les retours a la ligne echappes `\n` sont aussi acceptes. Utiliser une cle ECDSA compatible CCXT, pas une cle Ed25519. Si necessaire, creer une cle par portefeuille/sous-compte.
 
@@ -91,7 +92,7 @@ Le total d'un compte contenant LYUSDC suit donc la valorisation globale fournie 
 - Soldes `total` remontes par CCXT, incluant les fonds libres et bloques exposes par l'API.
 - Quantites et prix en EUR enregistres a chaque collecte. Aucun historique retroactif reel n'est invente.
 - Prix en EUR via **CoinGecko** (API simple/price). Cle optionnelle `COINGECKO_API_KEY` (type `demo` ou `pro`). Sans cle, l'API publique est utilisee avec des limites plus strictes. Cache local d'environ 60 secondes.
-- Si un actif non nul n'a pas de prix disponible, **tout le releve du compte echoue** : aucune valorisation partielle n'est enregistree. Les logs serveur indiquent le symbole concerne.
+- Pour les exchanges, si un actif non nul n'a pas de prix disponible, **tout le releve du compte echoue** : aucune valorisation partielle n'est enregistree. Pour Ethereum, les jetons sans cotation sont au contraire listes comme **non valorises** et le total est explicitement marque **partiel** (voir ci-dessous).
 - En cas d'echec d'un compte, son dernier releve est conserve et signale comme ancien. Les autres comptes continuent a etre collectes.
 - Le graphique global additionne les derniers releves connus a chaque instant ; ce ne sont pas necessairement des releves simultanes. Un nouveau compte commence a compter a son premier releve.
 - Les variations representent une variation de solde, **pas une performance d'investissement** : depots, retraits et transferts les affectent.
@@ -99,6 +100,24 @@ Le total d'un compte contenant LYUSDC suit donc la valorisation globale fournie 
 - Supprimer un compte supprime definitivement ses cles et ses releves et recalcule l'historique global sans ce compte. Une confirmation est requise.
 
 ## Configuration
+
+### Suivre une adresse MetaMask sur Ethereum
+
+Dans **Ajouter un compte**, choisir **MetaMask / Ethereum**, saisir un nom et l'adresse publique `0x...`, puis **Suivre cette adresse**. Aucun branchement a l'extension MetaMask, signature, mot de passe, cle privee ou phrase de recuperation n'est necessaire. Aucune nouvelle variable `.env` ou cle API n'est obligatoire. Une meme adresse ne peut etre ajoutee deux fois dans ce perimetre. Les adresses ENS ne sont pas resolues ; la validation verifie le format hexadecimal, pas la somme de controle EIP-55.
+
+Le connecteur ne suit que le **reseau principal Ethereum** (chain ID 1), meme si la meme adresse existe sur d'autres reseaux. Base, Arbitrum, Polygon, BNB Chain, les reseaux de test, les NFT et les positions DeFi sans jeton representatif dans le wallet ne sont pas inclus.
+
+- Lecture du solde ETH et de toutes les pages de jetons ERC-20 via l'API publique de [Blockscout Ethereum](https://eth.blockscout.com). L'adresse publique est transmise a cet explorateur ; ce sont des soldes indexes, qui peuvent avoir un delai par rapport a MetaMask. Une adresse dont le solde n'est pas encore indexe est signalee en erreur et n'est pas supposee vide.
+- Les quantites brutes sont converties avec les decimales propres a chaque contrat. Si les decimales sont indisponibles, la quantite affichee est **Indisponible** et la quantite brute reste conservee dans le releve ; aucune hypothese de 18 decimales n'est faite.
+- Valorisation ETH via CoinGecko ; ERC-20 par **adresse de contrat Ethereum**, jamais par le seul symbole. Les prix sont regroupes par lots de 50 contrats et utilisent la configuration CoinGecko deja existante. CoinGecko recoit les contrats, pas l'adresse du wallet. Deux jetons portant le meme symbole restent distincts et affichent un extrait de leur contrat.
+- Un jeton sans cours EUR disponible reste visible avec **Non valorise**. Le solde total, la carte du compte, l'historique et les donnees API signalent la valorisation partielle ; ces jetons sont exclus du sous-total chiffre, pas assimiles a des actifs valant zero. Le CSV ajoute la colonne `valuation_status` (`complete` ou `partial`). Les jetons distribues sans sollicitation peuvent donc apparaitre, sans leur attribuer le cours d'un jeton homonyme.
+- Une erreur reseau, un refus/une limite API, une reponse de solde malformee ou une pagination incomplete fait echouer la collecte et conserve le dernier releve. La lecture est limitee a 20 pages de jetons ; une limite atteinte est une erreur explicite, jamais un total tronque silencieusement. Les nouvelles captures ne sont pas garanties au meme bloc pour ETH et tous les jetons.
+
+Les quantites et valorisations sont stockees en nombres JavaScript pour l'affichage et les graphiques, et peuvent etre arrondies. Aucune transaction on-chain n'est generee. Les donnees precedentes des exchanges et leur comportement de collecte sont conserves. Apres fusion et deploiement, actualiser la page puis ajouter le wallet dans l'interface.
+
+References : [API Blockscout](https://github.com/blockscout/blockscout-api-v2-swagger/blob/main/swagger.yaml), [prix CoinGecko par contrat](https://docs.coingecko.com/demo/reference/simple-token-price).
+
+### Variables
 
 | Variable | Description |
 | --- | --- |

@@ -23,6 +23,7 @@ const providerNames = {
   kraken: "Kraken",
   coinbase: "Coinbase",
   gomining: "GoMining",
+  ethereum: "MetaMask / Ethereum",
 };
 const colors = [
   "#248b70",
@@ -74,9 +75,9 @@ const icon = (name, className = "") =>
   `<i data-lucide="${name}" class="${className}"></i>`;
 const accountName = (account) => escapeHtml(account.name);
 const accountScope = (account) =>
-  account.provider === "gomining" ? "Wallet" : account.provider === "okx" ? "Trading + Financement + Earn" : "Spot";
+  account.provider === "gomining" ? "Wallet" : account.provider === "ethereum" ? "Ethereum · ETH + ERC-20" : account.provider === "okx" ? "Trading + Financement + Earn" : "Spot";
 const providerLogo = (provider) =>
-  `<span class="provider-logo provider-${provider}">${icon(provider === "okx" ? "blocks" : provider === "kraken" ? "waves" : provider === "gomining" ? "pickaxe" : "circle-dollar-sign")}</span>`;
+  `<span class="provider-logo provider-${provider}">${icon(provider === "okx" ? "blocks" : provider === "kraken" ? "waves" : provider === "gomining" ? "pickaxe" : provider === "ethereum" ? "wallet" : "circle-dollar-sign")}</span>`;
 
 async function api(route, options = {}) {
   const response = await fetch(`/api${route}`, {
@@ -195,7 +196,9 @@ function renderOverview() {
   );
   $("#total-balance").innerHTML = `${decimal.format(total)} <span>EUR</span>`;
   $(".balance-label").firstChild.textContent =
-    state.account === "all" ? "Solde total " : "Solde du compte ";
+    accounts.some((account) => account.snapshot?.partial)
+      ? "Total valoris\u00e9 (partiel) "
+      : state.account === "all" ? "Solde total " : "Solde du compte ";
   const points = filteredPoints();
   const change = changeValue(points);
   const changeElement = $("#total-change");
@@ -215,6 +218,7 @@ function renderOverview() {
     (account) =>
       account.last_error ||
       !account.snapshot ||
+      account.snapshot.partial ||
       Date.now() - new Date(account.snapshot.captured_at).getTime() >
         state.session.intervalMinutes * 120000,
   );
@@ -227,6 +231,14 @@ function renderOverview() {
   if (failedAccounts.length) {
     $("#error-banner").textContent =
       `${failedAccounts.length} compte(s) en erreur. Le total inclut les derniers soldes connus. D\u00e9tails dans Mes comptes.`;
+    $("#error-banner").hidden = false;
+  }
+  const unpriced = state.portfolio.accounts.reduce((sum, account) =>
+    sum + (account.snapshot?.holdings.filter((item) => item.unpriced).length ?? 0), 0);
+  if (unpriced) {
+    const warning = `${unpriced} jeton(s) sans valorisation : exclus du total affich\u00e9, d\u00e9tails dans Actifs.`;
+    $("#error-banner").textContent = failedAccounts.length
+      ? `${$("#error-banner").textContent} ${warning}` : warning;
     $("#error-banner").hidden = false;
   }
   $("#chart-points").textContent =
@@ -397,7 +409,7 @@ function renderAccountCards() {
     state.portfolio.accounts
       .map(
         (account) =>
-          `<button class="account-card ${state.account === account.id ? "selected" : ""}" data-select-account="${account.id}" title="Afficher le graphique de ${accountName(account)}"><div class="account-card-top">${providerLogo(account.provider)}<span class="account-card-title"><strong>${accountName(account)}</strong><span>${providerNames[account.provider]} &middot; ${accountScope(account)}</span></span>${icon("arrow-up-right", "card-arrow")}</div><div class="card-value money">${account.snapshot ? decimal.format(account.snapshot.total) : "\u2014"} <small>EUR</small></div><div class="card-bottom"><span class="connected ${account.last_error ? "issue" : ""}"><span class="status-dot"></span>${state.session.demo ? "D\u00e9monstration" : account.last_error ? "\u00c0 v\u00e9rifier" : account.snapshot ? "Synchronis\u00e9" : "En attente"}</span><span>${account.snapshot ? dateFormat.format(new Date(account.snapshot.captured_at)) : "Aucun relev\u00e9"}</span></div></button>`,
+          `<button class="account-card ${state.account === account.id ? "selected" : ""}" data-select-account="${account.id}" title="Afficher le graphique de ${accountName(account)}"><div class="account-card-top">${providerLogo(account.provider)}<span class="account-card-title"><strong>${accountName(account)}</strong><span>${providerNames[account.provider]} &middot; ${accountScope(account)}</span></span>${icon("arrow-up-right", "card-arrow")}</div><div class="card-value money">${account.snapshot ? decimal.format(account.snapshot.total) : "\u2014"} <small>EUR</small></div><div class="card-bottom"><span class="connected ${account.last_error || account.snapshot?.partial ? "issue" : ""}"><span class="status-dot"></span>${state.session.demo ? "D\u00e9monstration" : account.last_error ? "\u00c0 v\u00e9rifier" : account.snapshot?.partial ? "Valorisation partielle" : account.snapshot ? "Synchronis\u00e9" : "En attente"}</span><span>${account.snapshot ? dateFormat.format(new Date(account.snapshot.captured_at)) : "Aucun relev\u00e9"}</span></div></button>`,
       )
       .join("") ||
     `<button class="no-data-card" data-add-account>${icon("plus")} Ajouter mon premier compte</button>`;
@@ -412,11 +424,23 @@ function renderAssets(accounts) {
         quantity: 0,
         value: 0,
         valuationOnly: holding.valuationOnly === true,
+        symbol: holding.symbol,
+        name: holding.name,
+        contract: holding.contract,
+        unpriced: false,
+        priced: false,
+        unknownQuantity: false,
       };
-      if (holding.valuationOnly) item.value += holding.value;
+      if (holding.unpriced) {
+        item.unpriced = true;
+        if (holding.quantity === null) item.unknownQuantity = true;
+        else item.quantity += holding.quantity;
+      }
+      else if (holding.valuationOnly) { item.value += holding.value; item.priced = true; }
       else {
         item.quantity += holding.quantity;
         item.value += holding.quantity * holding.price;
+        item.priced = true;
       }
       assets.set(holding.asset, item);
     }
@@ -432,7 +456,8 @@ function renderAssets(accounts) {
   $("#assets-empty").hidden = items.length > 0;
   $("#assets-body").innerHTML = items
     .map((item) => {
-      const info = assetInfo[item.asset] ?? { name: item.asset };
+      const info = assetInfo[item.asset] ?? { name: item.name ?? item.asset };
+      const symbol = item.symbol ?? item.asset;
       const share = total > 0 ? (item.value / total) * 100 : 0;
       const image = info.image
         ? `<img class="asset-icon" src="https://coin-images.coingecko.com/coins/images/${info.image}" alt="" loading="lazy" referrerpolicy="no-referrer">`
@@ -442,11 +467,15 @@ function renderAssets(accounts) {
         ? "Rapprochement avec le total OKX"
         : item.asset === "LYUSDC"
           ? "LYUSDC · estimation 1:1 USDC"
-          : item.valuationOnly ? "Estimation OKX en EUR" : item.asset;
-      const allocation = reconciliation
+          : item.contract ? `${symbol} · ${item.contract.slice(0, 8)}…${item.contract.slice(-4)}`
+            : item.valuationOnly ? "Estimation OKX en EUR" : item.asset;
+      const allocation = reconciliation || item.unpriced
         ? "\u2014"
         : `<div class="asset-allocation"><div class="allocation-bar"><span style="width:${Math.max(0, Math.min(100, share))}%"></span></div><span class="asset-percent">${percent.format(share)} %</span></div>`;
-      return `<tr><td><div class="asset-cell">${image}<div class="asset-label"><strong>${escapeHtml(info.name)}</strong><span>${escapeHtml(detail)}</span></div></div></td><td class="money">${item.valuationOnly ? "\u2014" : `${quantityFormat.format(item.quantity)} <span class="muted">${escapeHtml(item.asset)}</span>`}</td><td class="money">${euro.format(item.value)}</td><td>${allocation}</td></tr>`;
+      const value = item.unpriced
+        ? item.priced ? `${euro.format(item.value)} + ?` : "Non valoris\u00e9"
+        : euro.format(item.value);
+      return `<tr><td><div class="asset-cell">${image}<div class="asset-label"><strong>${escapeHtml(info.name)}</strong><span title="${escapeHtml(item.contract ?? detail)}">${escapeHtml(detail)}</span></div></div></td><td class="money">${item.valuationOnly ? "\u2014" : item.unknownQuantity ? "Indisponible" : `${quantityFormat.format(item.quantity)} <span class="muted">${escapeHtml(symbol)}</span>`}</td><td class="money">${value}</td><td>${allocation}</td></tr>`;
     })
     .join("");
   $$(".asset-icon").forEach((image) =>
@@ -498,7 +527,7 @@ function renderHistory() {
     visible
       .map(
         (point) =>
-          `<tr><td>${dateFormat.format(new Date(point.time))}</td><td class="history-account" title="${accountName(point.account)}">${accountName(point.account)}</td><td>${providerNames[point.account.provider]}</td><td class="money">${euro.format(point.total)}</td></tr>`,
+          `<tr><td>${dateFormat.format(new Date(point.time))}</td><td class="history-account" title="${accountName(point.account)}">${accountName(point.account)}</td><td>${providerNames[point.account.provider]}</td><td class="money">${euro.format(point.total)}${point.partial ? " (partiel)" : ""}</td></tr>`,
       )
       .join("") ||
     '<tr><td colspan="4" class="empty-line">Aucun relev\u00e9 sur cette p\u00e9riode.</td></tr>';
@@ -550,14 +579,22 @@ function openAccount() {
 function updateProvider() {
   const provider = $("#provider").value;
   const oauth = provider === "gomining";
-  $("#api-credentials").hidden = oauth;
+  const wallet = provider === "ethereum";
+  $("#wallet-address-field").hidden = !wallet;
+  $("#wallet-address").disabled = !wallet;
+  $("#wallet-address").required = wallet;
+  $("#api-credentials").hidden = oauth || wallet;
   $$("#api-credentials input, #api-credentials textarea").forEach((field) => {
-    field.disabled = oauth;
+    field.disabled = oauth || wallet;
   });
-  $("#connection-security").textContent = oauth
+  $("#connection-security").textContent = wallet
+    ? "Adresse publique uniquement. Lecture via Blockscout ; aucune signature ou connexion MetaMask."
+    : oauth
     ? "Autorisation GoMining en lecture seule."
     : "Droits de lecture seule uniquement. Aucun droit de trading ou de retrait.";
-  $("#connect-account-label").textContent = oauth
+  $("#connect-account-label").textContent = wallet
+    ? "Suivre cette adresse"
+    : oauth
     ? "Continuer avec GoMining"
     : "Connecter le compte";
   $("#passphrase-field").hidden = provider !== "okx";
@@ -609,6 +646,8 @@ async function collect() {
     toast(
       failed
         ? `${failed} compte(s) en erreur. Derniers soldes conserv\u00e9s.`
+        : state.portfolio.partial
+          ? "Soldes actualis\u00e9s. Certains jetons restent non valoris\u00e9s."
         : result.results.length
           ? "Soldes actualis\u00e9s."
           : "Aucun compte \u00e0 collecter.",
