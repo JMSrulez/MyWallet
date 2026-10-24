@@ -25,6 +25,8 @@ const providerNames = {
   gomining: "GoMining",
   ethereum: "MetaMask / Ethereum",
   viabtc: "ViaBTC",
+  gate: "Gate.io",
+  gateeu: "Gate EU",
 };
 const colors = [
   "#248b70",
@@ -46,6 +48,7 @@ const assetInfo = {
   OKX_EARN: { name: "OKX Earn (valorisation)" },
   LYUSDC: { name: "OKX Liquid Yield USDC" },
   OKX_RECONCILIATION: { name: "Ajustement au total OKX" },
+  GT: { name: "GateToken" },
 };
 const state = {
   portfolio: null,
@@ -582,6 +585,7 @@ function updateProvider() {
   const oauth = provider === "gomining";
   const wallet = provider === "ethereum";
   const apiKeyOnly = provider === "viabtc";
+  const gate = provider === "gate" || provider === "gateeu";
   $("#wallet-address-field").hidden = !wallet;
   $("#wallet-address").disabled = !wallet;
   $("#wallet-address").required = wallet;
@@ -593,7 +597,9 @@ function updateProvider() {
   $("#secret-label").hidden = apiKeyOnly;
   $("#api-secret").disabled = oauth || wallet || apiKeyOnly;
   $("#api-secret").required = !apiKeyOnly;
-  $("#connection-security").textContent = apiKeyOnly
+  $("#connection-security").textContent = gate
+    ? "Cl\u00e9 API v4 et secret. Permission Spot en lecture seule. Choisissez la plateforme o\u00f9 la cl\u00e9 a \u00e9t\u00e9 cr\u00e9\u00e9e : Gate.io international ou Gate EU."
+    : apiKeyOnly
     ? "Clé API ViaBTC uniquement. Autorisez l’IP publique de sortie du serveur dans ViaBTC."
     : wallet
     ? "Adresse publique uniquement. Lecture via Blockscout ; aucune signature ou connexion MetaMask."
